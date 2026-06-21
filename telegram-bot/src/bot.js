@@ -75,7 +75,16 @@ bot.start(async (ctx) => {
 });
 
 // Main menu text handlers
-bot.hears('🛍️ Paket buchen', async (ctx) => {
+// Register Bot Commands Menu
+bot.telegram.setMyCommands([
+  { command: 'start', description: 'Startet den Bot und öffnet das Hauptmenü' },
+  { command: 'paket', description: '🛍️ Spotify Premium Paket buchen' },
+  { command: 'abos', description: '📂 Meine Abonnements anzeigen' },
+  { command: 'faq', description: '❓ Support & FAQ anzeigen' }
+]);
+
+// Helper Functions for Common bot views
+async function handleShowPackages(ctx) {
   try {
     await getOrCreateUser(ctx);
     
@@ -104,9 +113,9 @@ bot.hears('🛍️ Paket buchen', async (ctx) => {
   } catch (err) {
     ctx.reply('❌ Fehler beim Laden der Pakete.');
   }
-});
+}
 
-bot.hears('📂 Meine Abonnements', async (ctx) => {
+async function handleShowSubscriptions(ctx) {
   try {
     const user = await getOrCreateUser(ctx);
     
@@ -161,22 +170,32 @@ bot.hears('📂 Meine Abonnements', async (ctx) => {
     console.error(err);
     ctx.reply('❌ Fehler beim Laden deiner Abonnements.');
   }
-});
+}
 
-bot.hears('❓ Support / FAQ', async (ctx) => {
+async function handleShowFAQ(ctx) {
   const faqText = 
     `❓ *Support & Häufig gestellte Fragen (FAQ)*\n\n` +
     `*1. Wie funktioniert das Upgrade?*\n` +
     `Nachdem deine Krypto-Zahlung bestätigt wurde, wirst du vom Bot aufgefordert, deine Spotify-Zugangsdaten einzugeben. Das System meldet sich an und fügt deinen Account automatisch einem Premium Family Plan hinzu. Deine Playlist und Musikdaten bleiben erhalten!\n\n` +
     `*2. Warum muss ich einen neuen Account angeben, falls mein Premium vorzeitig beendet wird?*\n` +
-    `⚠️ *WICHTIG:* Spotify schränkt den Wechsel von Family-Plänen streng auf *einmal pro 12 Monate* ein. Wenn du aus einer Familie entfernt wirst, kann derselbe Account in den nächsten 12 Monaten keiner neuen Familie mehr beitreten. Du musst in diesem Fall zwingend einen *neuen, frischen Spotify-Account* angeben, um deinen Ersatz zu erhalten.\n\n` +
+    `⚠️ *WICHTIG:* Spotify schränkt den Wechsel von Family-Plänen streng auf *einmal pro 12 Monate* ein. Wenn du aus einer Familie entfernt wirst, kann derselbe Account in den nächsten 12 Monaten keiner neuen Familie mehr beitreten. Du musst in diesem Fall zwingend einen *neuen, frischen Spotify-Account* angeben, um deinen Ersatz zu erhalten.\n` +
+    `*Tipp:* Als Kompensation für den Ausfall schreiben wir deiner verbleibenden Laufzeit bei jedem berechtigten Ersatz automatisch *48 Stunden* gut! 🎁\n\n` +
     `*3. Wie lange dauert die Freischaltung?*\n` +
     `Litecoin-Zahlungen werden ab der ersten Bestätigung auf der Blockchain freigeschaltet (normalerweise innerhalb von 2–10 Minuten). Das anschließende automatische Upgrade dauert ca. 5–30 Minuten.\n\n` +
     `*4. Support anfragen:*\n` +
     `Bei Problemen mit deinem Upgrade wende dich bitte an den Support-Admin unter @redo666redo. Gib dabei bitte deine Bestell-ID oder Telegram-ID an.`;
 
   await ctx.reply(faqText, { parse_mode: 'Markdown', ...getMainMenu() });
-});
+}
+
+// Command and hears handlers mapping
+bot.command('paket', handleShowPackages);
+bot.command('abos', handleShowSubscriptions);
+bot.command('faq', handleShowFAQ);
+
+bot.hears('🛍️ Paket buchen', handleShowPackages);
+bot.hears('📂 Meine Abonnements', handleShowSubscriptions);
+bot.hears('❓ Support / FAQ', handleShowFAQ);
 
 // Inline Action: Select Package
 bot.action(/^buy_(.+)$/, async (ctx) => {
@@ -487,6 +506,8 @@ bot.action(/^replace_ask_(.+)$/, async (ctx) => {
       `*Ablauf:*\n` +
       `1. Dein Key wird zurückgesetzt.\n` +
       `2. Du wirst aufgefordert, neue Daten für einen *NEUEN* Spotify-Account einzugeben.\n\n` +
+      `*Kompensation:*\n` +
+      `Als Entschädigung für den Ausfall schreiben wir deiner verbleibenden Laufzeit bei erfolgreichem Upgrade automatisch *48 Stunden extra* gut! 🎁\n\n` +
       `*WICHTIG:* Dein bestehender Account kann nicht noch einmal geupgradet werden (Spotify-Sperre: 1 Wechsel pro 12 Monate!).`,
       {
         parse_mode: 'Markdown',

@@ -241,8 +241,16 @@ async function watchUpgrades() {
 
         if (info.status === 'active') {
           // Success! Calculate expiration
-          const expiresAt = new Date();
-          expiresAt.setMonth(expiresAt.getMonth() + sub.packages.duration_months);
+          let expiresAt;
+          let isReplacement = false;
+          if (sub.expires_at) {
+            expiresAt = new Date(sub.expires_at);
+            expiresAt.setHours(expiresAt.getHours() + 48);
+            isReplacement = true;
+          } else {
+            expiresAt = new Date();
+            expiresAt.setMonth(expiresAt.getMonth() + sub.packages.duration_months);
+          }
 
           // Update DB
           await supabase
@@ -264,13 +272,20 @@ async function watchUpgrades() {
             .eq('id', key.id);
 
           if (telegramId) {
-            await notifyUser(telegramId,
-              `✅ *Premium-Upgrade erfolgreich!*\n\n` +
-              `Dein Spotify-Account wurde auf Premium hochgestuft.\n` +
-              `Laufzeit: ${sub.packages.duration_months} ${sub.packages.duration_months === 1 ? 'Monat' : 'Monate'}\n` +
-              `Ablaufdatum: ${expiresAt.toLocaleDateString('de-DE')}\n\n` +
-              `Viel Spaß mit werbefreier Musik! 🎧`
-            );
+            let successMsg = `✅ *Premium-Upgrade erfolgreich!*\n\n` +
+              `Dein Spotify-Account wurde auf Premium hochgestuft.\n`;
+            
+            if (isReplacement) {
+              successMsg += `• Laufzeit verlängert bis: *${expiresAt.toLocaleDateString('de-DE')} ${expiresAt.toLocaleTimeString('de-DE')} Uhr*\n` +
+                            `*(Inklusive 48h Ausgleichsgutschrift! 🎁)*\n\n`;
+            } else {
+              successMsg += `• Laufzeit: ${sub.packages.duration_months} ${sub.packages.duration_months === 1 ? 'Monat' : 'Monate'}\n` +
+                            `• Ablaufdatum: ${expiresAt.toLocaleDateString('de-DE')} ${expiresAt.toLocaleTimeString('de-DE')} Uhr\n\n`;
+            }
+            
+            successMsg += `Viel Spaß mit werbefreier Musik! 🎧`;
+            
+            await notifyUser(telegramId, successMsg);
           }
         } else if (info.status === 'error' || (info.message && info.status !== 'usable')) {
           // An error occurred during background processing
