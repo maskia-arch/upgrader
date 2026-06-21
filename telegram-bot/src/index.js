@@ -4,6 +4,16 @@ const { startWatcher } = require('./watcher');
 async function main() {
   console.log('[SYSTEM] Starting Spotify Premium Upgrade Bot...');
 
+  // Create a dummy HTTP server to bind to the port Render expects for Web Services
+  const http = require('http');
+  const dummyPort = process.env.PORT || 8080;
+  http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Spotify Premium Upgrade Bot is active.');
+  }).listen(dummyPort, () => {
+    console.log(`[SYSTEM] Port binder listening on port ${dummyPort} (Render compatibility)`);
+  });
+
   // Start Telegraf Bot
   try {
     await bot.launch();
