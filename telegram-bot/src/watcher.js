@@ -364,7 +364,7 @@ async function watchBroadcasts() {
       await supabase.from('broadcasts').update({ status: 'sending' }).eq('id', bc.id);
 
       // Get all users from users table
-      const { data: users, error: userErr } = await supabase.from('users').select('telegram_id');
+      const { data: users, error: userErr } = await supabase.from('users').select('id, telegram_id');
       if (userErr) {
         await supabase.from('broadcasts').update({ status: 'failed', error_message: userErr.message }).eq('id', bc.id);
         continue;
@@ -376,15 +376,30 @@ async function watchBroadcasts() {
       }
 
       let sentCount = 0;
+      let failedCount = 0;
       
       for (const u of users) {
         if (!u.telegram_id) continue;
         
         try {
-          await notifyUser(u.telegram_id, bc.message);
+          if (!telegramBot) throw new Error('Telegram bot instance not initialized');
+          await telegramBot.telegram.sendMessage(u.telegram_id, bc.message, { parse_mode: 'Markdown' });
           sentCount++;
+
+          // Reset delivery failure tracking
+          await supabase
+            .from('users')
+            .update({ last_delivery_failed_at: null, check_prompt_sent_at: null })
+            .eq('id', u.id);
         } catch (err) {
+          failedCount++;
           console.warn(`[WATCHER WARNING] Failed to send broadcast to user ${u.telegram_id}:`, err.message);
+
+          // Set delivery failure tracking
+          await supabase
+            .from('users')
+            .update({ last_delivery_failed_at: new Date().toISOString() })
+            .eq('id', u.id);
         }
         
         // Wait 50ms to respect Telegram rate limits (max 30 msgs/sec)
@@ -396,14 +411,109 @@ async function watchBroadcasts() {
         .from('broadcasts')
         .update({
           status: 'sent',
-          sent_count: sentCount
+          sent_count: sentCount,
+          error_message: failedCount > 0 ? `${failedCount} deliveries failed.` : null
         })
         .eq('id', bc.id);
       
-      console.log(`[WATCHER] Broadcast ${bc.id} complete. Sent to ${sentCount} users.`);
+      console.log(`[WATCHER] Broadcast ${bc.id} complete. Sent to ${sentCount} users, failed for ${failedCount} users.`);
     }
   } catch (err) {
     console.error('[WATCHER ERROR] Error in watchBroadcasts loop:', err.message);
+  }
+}
+
+/**
+ * 6. Failed Delivery Cleanup & Check-Prompt worker
+ * Runs periodically to check for users whose last delivery failed:
+ * - After 5 days: attempts to send "Bist du noch da ?"
+ * - After 14 days: deletes user if they have no active subscription.
+ */
+async function checkFailedDeliveries() {
+  console.log('[WORKER] Running failed delivery checks...');
+  try {
+    const now = new Date();
+    
+    // 5-day check prompt
+    const fiveDaysAgo = new Date();
+    fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+    
+    const { data: promptUsers, error: promptErr } = await supabase
+      .from('users')
+      .select('*')
+      .not('last_delivery_failed_at', 'is', null)
+      .is('check_prompt_sent_at', null)
+      .lte('last_delivery_failed_at', fiveDaysAgo.toISOString());
+      
+    if (promptErr) throw promptErr;
+    
+    for (const u of promptUsers) {
+      console.log(`[WORKER] Sending 'Bist du noch da ?' prompt to user ${u.telegram_id}...`);
+      const lang = u.language || 'en';
+      const promptMsg = t('broadcast_prompt_active', lang);
+      
+      try {
+        if (!telegramBot) throw new Error('Telegram bot instance not initialized');
+        await telegramBot.telegram.sendMessage(u.telegram_id, promptMsg, { parse_mode: 'Markdown' });
+        
+        // Succeeded! Reset failure flags since they are back
+        await supabase
+          .from('users')
+          .update({ last_delivery_failed_at: null, check_prompt_sent_at: null })
+          .eq('id', u.id);
+          
+        console.log(`[WORKER] User ${u.telegram_id} successfully received prompt. Resetting flags.`);
+      } catch (err) {
+        // Failed again (which is expected if still blocked)
+        // Mark check_prompt_sent_at as sent so we don't spam them, and track 14-day deletion threshold
+        await supabase
+          .from('users')
+          .update({ check_prompt_sent_at: new Date().toISOString() })
+          .eq('id', u.id);
+          
+        console.log(`[WORKER] Prompt delivery failed for user ${u.telegram_id}. check_prompt_sent_at recorded.`);
+      }
+    }
+    
+    // 14-day cleanup deletion
+    const fourteenDaysAgo = new Date();
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+    
+    const { data: deleteUsers, error: deleteErr } = await supabase
+      .from('users')
+      .select('*')
+      .not('last_delivery_failed_at', 'is', null)
+      .not('check_prompt_sent_at', 'is', null)
+      .lte('last_delivery_failed_at', fourteenDaysAgo.toISOString());
+      
+    if (deleteErr) throw deleteErr;
+    
+    for (const u of deleteUsers) {
+      // Check active subscriptions
+      const { count: activeSubsCount, error: subErr } = await supabase
+        .from('subscriptions')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', u.id)
+        .eq('status', 'active');
+        
+      if (subErr) {
+        console.error(`[WORKER ERROR] Failed checking active subscriptions for user ${u.id}:`, subErr.message);
+        continue;
+      }
+      
+      if (activeSubsCount === 0) {
+        console.log(`[WORKER] Deleting inactive user ${u.telegram_id} due to 14-day delivery failure lockout.`);
+        const { error: dropErr } = await supabase.from('users').delete().eq('id', u.id);
+        if (dropErr) {
+          console.error(`[WORKER ERROR] Failed to delete user ${u.id}:`, dropErr.message);
+        }
+      } else {
+        console.log(`[WORKER] Skipping deletion of user ${u.telegram_id} because they have an active subscription.`);
+      }
+    }
+  } catch (err) {
+    if (err.code === '42P01') return; // Table/columns not updated yet
+    console.error('[WORKER ERROR] Error in checkFailedDeliveries:', err.message);
   }
 }
 
@@ -433,6 +543,10 @@ function startWatcher(botInstance) {
   // Run broadcast checks every 30 seconds (30000 ms)
   setInterval(watchBroadcasts, 30000);
   watchBroadcasts(); // Run immediately
+
+  // Run failed delivery checks every 10 minutes (600000 ms)
+  setInterval(checkFailedDeliveries, 600000);
+  checkFailedDeliveries(); // Run immediately
 }
 
 module.exports = {
@@ -442,4 +556,5 @@ module.exports = {
   checkExpirations,
   checkReplacements,
   watchBroadcasts,
+  checkFailedDeliveries,
 };

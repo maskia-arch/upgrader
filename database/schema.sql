@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT,
     flags INTEGER NOT NULL DEFAULT 0,
     language TEXT NOT NULL DEFAULT 'en' CHECK (language IN ('en', 'de', 'ru')),
+    last_delivery_failed_at TIMESTAMPTZ,
+    check_prompt_sent_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

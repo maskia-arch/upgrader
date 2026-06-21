@@ -135,6 +135,7 @@ const locales = {
     
     lang_selection_prompt: '🌐 *Select your language / Sprache auswählen / Выберите язык:*',
     lang_changed: '✅ Language changed to English!',
+    broadcast_prompt_active: 'Bist du noch da ?',
     text_help: 'Please select an option from the menu or follow the instructions.',
     system_error: '❌ System error processing the upgrade.',
     
@@ -290,6 +291,7 @@ const locales = {
     
     lang_selection_prompt: '🌐 *Sprache auswählen / Select your language / Выберите язык:*',
     lang_changed: '✅ Sprache auf Deutsch umgestellt!',
+    broadcast_prompt_active: 'Bist du noch da ?',
     text_help: 'Bitte wähle eine Option aus dem Menü oder folge den Anweisungen.',
     system_error: '❌ Systemfehler beim Verarbeiten des Upgrades.',
     
@@ -447,6 +449,7 @@ const locales = {
     
     lang_selection_prompt: '🌐 *Выберите язык / Select your language / Sprache auswählen:*',
     lang_changed: '✅ Язык успешно изменен на русский!',
+    broadcast_prompt_active: 'Bist du noch da ?',
     text_help: 'Пожалуйста, выберите опцию в меню или следуйте инструкциям.',
     system_error: '❌ Системная ошибка при обработке активации.',
     

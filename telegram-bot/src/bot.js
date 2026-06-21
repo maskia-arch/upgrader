@@ -57,6 +57,17 @@ async function getOrCreateUser(ctx) {
     if (updatedUser) user = updatedUser;
   }
 
+  // Reset failure flags if they are active again
+  if (user.last_delivery_failed_at !== null || user.check_prompt_sent_at !== null) {
+    const { data: updatedUser } = await supabase
+      .from('users')
+      .update({ last_delivery_failed_at: null, check_prompt_sent_at: null })
+      .eq('id', user.id)
+      .select()
+      .single();
+    if (updatedUser) user = updatedUser;
+  }
+
   return user;
 }
 
