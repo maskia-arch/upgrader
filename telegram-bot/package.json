@@ -1,0 +1,16 @@
+{
+  "name": "spotify-upgrade-bot",
+  "version": "1.0.0",
+  "description": "Telegram Bot & Watcher for Spotify Premium Upgrade System",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.8",
+    "dotenv": "^16.4.5",
+    "telegraf": "^4.16.3"
+  }
+}

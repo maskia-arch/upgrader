@@ -1,0 +1,12 @@
+# Ignore local environment configs
+.env
+*.env
+.env.local
+
+# Ignore node modules
+node_modules/
+dist/
+npm-debug.log*
+
+# IGNORE LOCAL ADMIN DASHBOARD TO PREVENT GITHUB PUSHES
+admin-dashboard/
