@@ -334,6 +334,80 @@ async function watchUpgrades() {
 }
 
 /**
+ * 5. Broadcast Sender Daemon
+ * Checks for scheduled broadcasts that are ready to send, then loops through all users and sends them.
+ */
+async function watchBroadcasts() {
+  console.log('[WATCHER] Checking for pending broadcasts...');
+  try {
+    const now = new Date().toISOString();
+    
+    // Select broadcasts that are pending and (scheduled_at is null OR <= now)
+    const { data: broadcasts, error } = await supabase
+      .from('broadcasts')
+      .select('*')
+      .eq('status', 'pending')
+      .or(`scheduled_at.is.null,scheduled_at.lte.${now}`)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      if (error.code === '42P01') return; // Table not created yet
+      throw error;
+    }
+    
+    if (!broadcasts || broadcasts.length === 0) return;
+
+    for (const bc of broadcasts) {
+      console.log(`[WATCHER] Starting broadcast ${bc.id}...`);
+      
+      // Update status to sending to prevent double sending
+      await supabase.from('broadcasts').update({ status: 'sending' }).eq('id', bc.id);
+
+      // Get all users from users table
+      const { data: users, error: userErr } = await supabase.from('users').select('telegram_id');
+      if (userErr) {
+        await supabase.from('broadcasts').update({ status: 'failed', error_message: userErr.message }).eq('id', bc.id);
+        continue;
+      }
+
+      if (!users || users.length === 0) {
+        await supabase.from('broadcasts').update({ status: 'sent', sent_count: 0 }).eq('id', bc.id);
+        continue;
+      }
+
+      let sentCount = 0;
+      
+      for (const u of users) {
+        if (!u.telegram_id) continue;
+        
+        try {
+          await notifyUser(u.telegram_id, bc.message);
+          sentCount++;
+        } catch (err) {
+          console.warn(`[WATCHER WARNING] Failed to send broadcast to user ${u.telegram_id}:`, err.message);
+        }
+        
+        // Wait 50ms to respect Telegram rate limits (max 30 msgs/sec)
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      // Update status to sent
+      await supabase
+        .from('broadcasts')
+        .update({
+          status: 'sent',
+          sent_count: sentCount
+        })
+        .eq('id', bc.id);
+      
+      console.log(`[WATCHER] Broadcast ${bc.id} complete. Sent to ${sentCount} users.`);
+    }
+  } catch (err) {
+    console.error('[WATCHER ERROR] Error in watchBroadcasts loop:', err.message);
+  }
+}
+
+/**
  * Start all worker loop timers
  */
 function startWatcher(botInstance) {
@@ -355,6 +429,10 @@ function startWatcher(botInstance) {
   // Run replacement checks every 5 minutes (300000 ms)
   setInterval(checkReplacements, 300000);
   checkReplacements(); // Run immediately
+
+  // Run broadcast checks every 30 seconds (30000 ms)
+  setInterval(watchBroadcasts, 30000);
+  watchBroadcasts(); // Run immediately
 }
 
 module.exports = {
@@ -363,4 +441,5 @@ module.exports = {
   watchUpgrades,
   checkExpirations,
   checkReplacements,
+  watchBroadcasts,
 };

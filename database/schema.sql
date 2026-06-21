@@ -93,3 +93,16 @@ CREATE TABLE IF NOT EXISTS system_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_system_logs_unresolved ON system_logs (is_resolved) WHERE is_resolved = FALSE;
+
+-- 8. Broadcasts
+CREATE TABLE IF NOT EXISTS broadcasts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    message TEXT NOT NULL,
+    scheduled_at TIMESTAMPTZ,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sending', 'sent', 'failed')),
+    sent_count INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_broadcasts_status_sched ON broadcasts (status, scheduled_at);
