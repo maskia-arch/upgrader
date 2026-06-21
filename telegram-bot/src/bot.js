@@ -99,11 +99,11 @@ async function handleShowPackages(ctx) {
     }
 
     let msg = '🛍️ *Wähle ein Spotify Premium Paket aus:*\n\n';
-    const buttons = [];
+        const buttons = [];
 
     packages.forEach(pkg => {
       msg += `• *${pkg.name}*\n  Laufzeit: ${pkg.duration_months} ${pkg.duration_months === 1 ? 'Monat' : 'Monate'}\n  Preis: ${pkg.price_eur.toFixed(2)} EUR\n\n`;
-      buttons.push([Markup.button.callback(`Jetzt buchen: ${pkg.name} (${pkg.price_eur.toFixed(2)}€)`, `buy_${pkg.id}`)]);
+      buttons.push([Markup.button.callback(`🟢 Jetzt buchen: ${pkg.name} (${pkg.price_eur.toFixed(2)}€)`, `buy_${pkg.id}`)]);
     });
 
     await ctx.reply(msg, {
@@ -152,13 +152,13 @@ async function handleShowSubscriptions(ctx) {
       const buttons = [];
       
       if (sub.status === 'pending_payment') {
-        buttons.push([Markup.button.callback('💳 Zahlungsdetails anzeigen', `pay_details_${sub.id}`)]);
+        buttons.push([Markup.button.callback('🔵 Zahlungsdetails anzeigen', `pay_details_${sub.id}`)]);
       } else if (sub.status === 'active') {
-        buttons.push([Markup.button.callback('♻️ Ersatz anfragen (Kick/Fehler)', `replace_ask_${sub.id}`)]);
+        buttons.push([Markup.button.callback('🟡 Ersatz anfragen (Kick/Fehler)', `replace_ask_${sub.id}`)]);
       } else if (sub.status === 'activating') {
-        buttons.push([Markup.button.callback('✏️ Login-Daten eingeben', `enter_credentials_${sub.id}`)]);
+        buttons.push([Markup.button.callback('🟢 Login-Daten eingeben', `enter_credentials_${sub.id}`)]);
       } else if (sub.status === 'failed') {
-        buttons.push([Markup.button.callback('🔄 Daten erneut eingeben', `enter_credentials_${sub.id}`)]);
+        buttons.push([Markup.button.callback('🟡 Daten erneut eingeben', `enter_credentials_${sub.id}`)]);
       }
 
       await ctx.reply(subInfo, {
@@ -182,7 +182,9 @@ async function handleShowFAQ(ctx) {
     `*Tipp:* Als Kompensation für den Ausfall schreiben wir deiner verbleibenden Laufzeit bei jedem berechtigten Ersatz automatisch *48 Stunden* gut! 🎁\n\n` +
     `*3. Wie lange dauert die Freischaltung?*\n` +
     `Litecoin-Zahlungen werden ab der ersten Bestätigung auf der Blockchain freigeschaltet (normalerweise innerhalb von 2–10 Minuten). Das anschließende automatische Upgrade dauert ca. 5–30 Minuten.\n\n` +
-    `*4. Support anfragen:*\n` +
+    `*4. Gibt es Regeln für das Anfordern von Ersatz?*\n` +
+    `⚠️ *Ja.* Bitte fordere Ersatz nur an, wenn dein Premium tatsächlich nicht mehr funktioniert. Fälschliches Anfordern von Ersatz (z.B. wenn Premium noch aktiv ist) führt zu einem systemseitigen *Flag (Verwarnung)*. Bei *3 Flags* wird die Bearbeitung von Ersatzanfragen für deinen Key dauerhaft gesperrt.\n\n` +
+    `*5. Support anfragen:*\n` +
     `Bei Problemen mit deinem Upgrade wende dich bitte an den Support-Admin unter @redo666redo. Gib dabei bitte deine Bestell-ID oder Telegram-ID an.`;
 
   await ctx.reply(faqText, { parse_mode: 'Markdown', ...getMainMenu() });
@@ -346,8 +348,8 @@ async function sendPaymentInvoice(ctx, subId, invoice, address, packageName) {
     `*WICHTIG:* Sende genau den geforderten Betrag. Nach Ablauf der Reservierung verfällt die Rechnung.`;
 
   const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback('🔄 Zahlung jetzt prüfen', `check_pay_${invoice.id}`)],
-    [Markup.button.callback('❌ Zahlung stornieren', `cancel_pay_${invoice.id}`)]
+    [Markup.button.callback('🟢 Zahlung jetzt prüfen', `check_pay_${invoice.id}`)],
+    [Markup.button.callback('🔴 Zahlung stornieren', `cancel_pay_${invoice.id}`)]
   ]);
 
   if (ctx.callbackQuery) {
@@ -503,6 +505,7 @@ bot.action(/^replace_ask_(.+)$/, async (ctx) => {
     await ctx.reply(
       `⚠️ *Ersatz für dieses Abonnement anfragen?*\n\n` +
       `Nutze diese Option nur, wenn du vorzeitig aus der Family geworfen wurdest oder dein Premium nicht mehr funktioniert.\n\n` +
+      `*⚠️ WICHTIGER HINWEIS:* Das fälschliche Anfordern von Ersatz (z.B. wenn Premium auf deinem Account noch aktiv ist) wird systemseitig mit einem Flag (Verwarnung) belegt. Bei 3 Flags wirst du für jegliche zukünftige Ersatzanfragen dieses Keys gesperrt!\n\n` +
       `*Ablauf:*\n` +
       `1. Dein Key wird zurückgesetzt.\n` +
       `2. Du wirst aufgefordert, neue Daten für einen *NEUEN* Spotify-Account einzugeben.\n\n` +
@@ -512,8 +515,8 @@ bot.action(/^replace_ask_(.+)$/, async (ctx) => {
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [Markup.button.callback('♻️ Ja, Ersatz anfordern', `replace_confirm_${subId}`)],
-          [Markup.button.callback('❌ Abbrechen', 'cancel_replace')]
+          [Markup.button.callback('🟢 Ja, Ersatz anfordern', `replace_confirm_${subId}`)],
+          [Markup.button.callback('🔴 Abbrechen', 'cancel_replace')]
         ])
       }
     );
@@ -533,15 +536,70 @@ bot.action(/^replace_confirm_(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
     
-    // Fetch subscription
+    // Fetch subscription, key, and user info (including flags)
     const { data: sub, error } = await supabase
       .from('subscriptions')
-      .select('*, upgrader_keys(api_key)')
+      .select('*, upgrader_keys(api_key), users(flags, telegram_id)')
       .eq('id', subId)
       .single();
 
     if (error || !sub || sub.status !== 'active') {
       return ctx.reply('⚠️ Nur aktive Abonnements können reklamiert werden.');
+    }
+
+    // Check if the user is banned due to too many flags
+    const currentFlags = (sub.users && sub.users.flags) || 0;
+    if (currentFlags >= 3) {
+      return ctx.reply(
+        `❌ *Aktion gesperrt!*\n\n` +
+        `Du hast das Limit von 3 Verwarnungen (Flags) wegen missbräuchlicher Ersatzanfragen erreicht.\n` +
+        `Weitere Ersatzanfragen für diesen Key/Account können nicht mehr bearbeitet werden.`
+      );
+    }
+
+    let isPremiumActive = false;
+    let renewSuccess = true;
+    let apiMessage = '';
+
+    // Call upgrader.cc renew/release api first (if key exists)
+    if (sub.upgrader_keys && sub.upgrader_keys.api_key) {
+      // Decrypt credentials to call renewal
+      const decryptedPassword = decrypt(sub.spotify_password_encrypted);
+      const renewResult = await renewAccount(sub.upgrader_keys.api_key, sub.spotify_email, decryptedPassword);
+      
+      if (!renewResult.success) {
+        renewSuccess = false;
+        apiMessage = renewResult.message || '';
+        if (apiMessage.toLowerCase().includes('premium still active')) {
+          isPremiumActive = true;
+        }
+      }
+    }
+
+    if (isPremiumActive) {
+      // Increment flags
+      const newFlags = currentFlags + 1;
+      
+      // Update flags count in users table
+      await supabase
+        .from('users')
+        .update({ flags: newFlags })
+        .eq('id', sub.user_id);
+
+      // Log this incident
+      await supabase.from('system_logs').insert({
+        level: 'ERROR',
+        component: 'API',
+        message: `Missbräuchliche Ersatzanfrage (Premium noch aktiv) von User ${sub.user_id}`,
+        details: { sub_id: sub.id, key: sub.upgrader_keys?.api_key, current_flags: newFlags }
+      });
+
+      return ctx.reply(
+        `⚠️ *Ersatz fehlgeschlagen: Premium noch aktiv!*\n\n` +
+        `Laut Spotify-Schnittstelle ist Premium auf deinem Account noch aktiv. Du hast ein systemseitiges Flag erhalten.\n\n` +
+        `*Status:* ${newFlags}/3 Flags.\n` +
+        `Bei 3 Flags wirst du für weitere Ersatzanfragen gesperrt!`
+      );
     }
 
     // Set subscription status to renewing
@@ -550,22 +608,15 @@ bot.action(/^replace_confirm_(.+)$/, async (ctx) => {
       .update({ status: 'renewing', updated_at: new Date().toISOString() })
       .eq('id', subId);
 
-    // Call upgrader.cc renew/release api (if key exists)
-    if (sub.upgrader_keys && sub.upgrader_keys.api_key) {
-      // Decrypt credentials to call renewal
-      const decryptedPassword = decrypt(sub.spotify_password_encrypted);
-      const renewResult = await renewAccount(sub.upgrader_keys.api_key, sub.spotify_email, decryptedPassword);
-      
-      if (!renewResult.success) {
-        console.warn(`[UPGRADER WARNING] Renew request failed: ${renewResult.message}`);
-        // Log in system logs
-        await supabase.from('system_logs').insert({
-          level: 'ERROR',
-          component: 'API',
-          message: `Ersatz-Renew API-Aufruf fehlgeschlagen für Sub ${sub.id}`,
-          details: { key: sub.upgrader_keys.api_key, error: renewResult.message }
-        });
-      }
+    if (!renewSuccess) {
+      console.warn(`[UPGRADER WARNING] Renew request failed: ${apiMessage}`);
+      // Log in system logs
+      await supabase.from('system_logs').insert({
+        level: 'ERROR',
+        component: 'API',
+        message: `Ersatz-Renew API-Aufruf fehlgeschlagen für Sub ${sub.id}`,
+        details: { key: sub.upgrader_keys?.api_key, error: apiMessage }
+      });
     }
 
     await ctx.reply(
@@ -573,6 +624,7 @@ bot.action(/^replace_confirm_(.+)$/, async (ctx) => {
       `Dein Key wird zurückgesetzt. Wir prüfen den Status alle 5 Minuten. Sobald dein Slot wieder freigegeben ist, senden wir dir hier eine Benachrichtigung, damit du deine neuen Spotify-Account-Daten eingeben kannst.`
     );
   } catch (err) {
+    console.error('[BOT ERROR] Replace confirm error:', err);
     ctx.reply('❌ Ersatz-Anfrage fehlgeschlagen.');
   }
 });

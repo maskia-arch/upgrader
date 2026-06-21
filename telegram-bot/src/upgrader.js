@@ -81,6 +81,12 @@ async function upgradeAccount(key, email, password) {
 async function renewAccount(key, email, password = '') {
   if (config.useMockApi) {
     console.log(`[MOCK API] Initiating renewal for key: ${key}, Email: ${email}`);
+    if (email.toLowerCase().includes('still_active') || (password && password.toLowerCase().includes('still_active'))) {
+      return {
+        success: false,
+        message: 'premium still active'
+      };
+    }
     return {
       success: true,
       message: 'Renewal / replacement process initiated successfully (Simulated)'
