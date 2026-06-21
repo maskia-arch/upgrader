@@ -10,3 +10,8 @@ npm-debug.log*
 
 # IGNORE LOCAL ADMIN DASHBOARD TO PREVENT GITHUB PUSHES
 admin-dashboard/
+
+# IGNORE SETUP, README AND TESTS FOR LOCAL USE ONLY
+README.md
+start-admin.bat
+tests/
