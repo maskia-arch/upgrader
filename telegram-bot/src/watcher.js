@@ -214,6 +214,135 @@ async function checkReplacements() {
 }
 
 /**
+ * 4. Active Upgrade Polling Worker
+ * Checks subscriptions in 'activating' status, polls upgrader.cc key status to verify success or specific error codes.
+ */
+async function watchUpgrades() {
+  console.log('[WORKER] Checking active upgrades (activating status)...');
+  try {
+    const { data: activatingSubs, error } = await supabase
+      .from('subscriptions')
+      .select('*, upgrader_keys(*), packages(duration_months), users(telegram_id)')
+      .eq('status', 'activating');
+
+    if (error) throw error;
+    if (!activatingSubs || activatingSubs.length === 0) return;
+
+    for (const sub of activatingSubs) {
+      if (!sub.upgrader_keys || !sub.upgrader_keys.api_key) continue;
+
+      const key = sub.upgrader_keys;
+      const telegramId = sub.users?.telegram_id;
+
+      try {
+        // Poll key status
+        const info = await getKeyInfo(key.api_key);
+        console.log(`[WORKER] Key ${key.api_key} status for sub ${sub.id}: ${info.status}`);
+
+        if (info.status === 'active') {
+          // Success! Calculate expiration
+          const expiresAt = new Date();
+          expiresAt.setMonth(expiresAt.getMonth() + sub.packages.duration_months);
+
+          // Update DB
+          await supabase
+            .from('subscriptions')
+            .update({
+              status: 'active',
+              expires_at: expiresAt.toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', sub.id);
+
+          await supabase
+            .from('upgrader_keys')
+            .update({
+              status: 'active',
+              error_message: null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', key.id);
+
+          if (telegramId) {
+            await notifyUser(telegramId,
+              `✅ *Premium-Upgrade erfolgreich!*\n\n` +
+              `Dein Spotify-Account wurde auf Premium hochgestuft.\n` +
+              `Laufzeit: ${sub.packages.duration_months} ${sub.packages.duration_months === 1 ? 'Monat' : 'Monate'}\n` +
+              `Ablaufdatum: ${expiresAt.toLocaleDateString('de-DE')}\n\n` +
+              `Viel Spaß mit werbefreier Musik! 🎧`
+            );
+          }
+        } else if (info.status === 'error' || (info.message && info.status !== 'usable')) {
+          // An error occurred during background processing
+          const errMsg = info.message || key.error_message || 'Unbekannter Fehler';
+
+          await supabase.from('system_logs').insert({
+            level: 'ERROR',
+            component: 'WATCHER',
+            message: `Background upgrade error for Sub ${sub.id}: ${errMsg}`,
+            details: { key: key.api_key, error: errMsg, email: sub.spotify_email }
+          });
+
+          // Check error type
+          const isCredentialError = errMsg.toLowerCase().includes('password') || 
+                                    errMsg.toLowerCase().includes('credential') || 
+                                    errMsg.toLowerCase().includes('login') ||
+                                    errMsg.toLowerCase().includes('incorrect') ||
+                                    errMsg.toLowerCase().includes('invalid account details');
+
+          const isFamilyLimitError = errMsg.toLowerCase().includes('12 months') || 
+                                     errMsg.toLowerCase().includes('family limit') || 
+                                     errMsg.toLowerCase().includes('12 monate') ||
+                                     errMsg.toLowerCase().includes('once per year');
+
+          if (isCredentialError) {
+            // Mark sub as failed so user can re-submit
+            await supabase.from('subscriptions').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', sub.id);
+            await supabase.from('upgrader_keys').update({ status: 'usable', error_message: errMsg, updated_at: new Date().toISOString() }).eq('id', key.id);
+
+            if (telegramId) {
+              await notifyUser(telegramId,
+                `❌ *Upgrade fehlgeschlagen!*\n\n` +
+                `Deine Spotify-Zugangsdaten (E-Mail oder Passwort) sind leider falsch.\n\n` +
+                `Bitte überprüfe dein Passwort und sende mir deine Daten erneut im Format \`E-Mail:Passwort\`.`
+              );
+            }
+          } else if (isFamilyLimitError) {
+            // Mark sub as failed, user must supply a different account
+            await supabase.from('subscriptions').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', sub.id);
+            await supabase.from('upgrader_keys').update({ status: 'usable', error_message: errMsg, updated_at: new Date().toISOString() }).eq('id', key.id);
+
+            if (telegramId) {
+              await notifyUser(telegramId,
+                `❌ *Upgrade fehlgeschlagen!*\n\n` +
+                `Dein Spotify-Account war in den letzten 12 Monaten bereits Teil einer Premium Family.\n\n` +
+                `⚠️ *WICHTIG:* Wegen der Spotify-Sperre musst du einen **anderen (neuen) Spotify-Account** verwenden. Bitte erstelle einen neuen Account und sende mir die Zugangsdaten im Format \`E-Mail:Passwort\`.`
+              );
+            }
+          } else {
+            // Generic error, set status failed but notify user about delay
+            await supabase.from('subscriptions').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', sub.id);
+            await supabase.from('upgrader_keys').update({ status: 'error', error_message: errMsg, updated_at: new Date().toISOString() }).eq('id', key.id);
+
+            if (telegramId) {
+              await notifyUser(telegramId,
+                `⚠️ *Upgrade-Verzögerung:*\n\n` +
+                `Es gab ein technisches Problem bei der Aktivierung: \`${errMsg}\`.\n\n` +
+                `Der Support-Admin wurde benachrichtigt. Du kannst dich auch direkt an @redo666redo wenden.`
+              );
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`[WORKER ERROR] Failed polling key ${key.api_key} status for sub ${sub.id}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('[WORKER ERROR] Error in watchUpgrades loop:', err.message);
+  }
+}
+
+/**
  * Start all worker loop timers
  */
 function startWatcher(botInstance) {
@@ -223,6 +352,10 @@ function startWatcher(botInstance) {
   // Run payment checks every 2 minutes (120000 ms)
   setInterval(watchPayments, 120000);
   watchPayments(); // Run immediately
+
+  // Run active upgrades checks every 2 minutes (120000 ms)
+  setInterval(watchUpgrades, 120000);
+  watchUpgrades(); // Run immediately
 
   // Run expiration checks every 5 minutes (300000 ms)
   setInterval(checkExpirations, 300000);
@@ -236,6 +369,7 @@ function startWatcher(botInstance) {
 module.exports = {
   startWatcher,
   watchPayments,
+  watchUpgrades,
   checkExpirations,
   checkReplacements,
 };

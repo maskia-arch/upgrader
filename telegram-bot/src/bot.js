@@ -167,13 +167,13 @@ bot.hears('❓ Support / FAQ', async (ctx) => {
   const faqText = 
     `❓ *Support & Häufig gestellte Fragen (FAQ)*\n\n` +
     `*1. Wie funktioniert das Upgrade?*\n` +
-    `Nachdem deine Krypto-Zahlung bestätigt wurde, wirst du vom Bot aufgefordert, deine Spotify-Zugangsdaten einzugeben. Das System meldet sich über die Reseller-Schnittstelle an und fügt deinen Account automatisch einem Premium Family Plan hinzu. Deine Playlist und Musikdaten bleiben erhalten!\n\n` +
+    `Nachdem deine Krypto-Zahlung bestätigt wurde, wirst du vom Bot aufgefordert, deine Spotify-Zugangsdaten einzugeben. Das System meldet sich an und fügt deinen Account automatisch einem Premium Family Plan hinzu. Deine Playlist und Musikdaten bleiben erhalten!\n\n` +
     `*2. Warum muss ich einen neuen Account angeben, falls mein Premium vorzeitig beendet wird?*\n` +
     `⚠️ *WICHTIG:* Spotify schränkt den Wechsel von Family-Plänen streng auf *einmal pro 12 Monate* ein. Wenn du aus einer Familie entfernt wirst, kann derselbe Account in den nächsten 12 Monaten keiner neuen Familie mehr beitreten. Du musst in diesem Fall zwingend einen *neuen, frischen Spotify-Account* angeben, um deinen Ersatz zu erhalten.\n\n` +
     `*3. Wie lange dauert die Freischaltung?*\n` +
-    `Litecoin-Zahlungen werden ab der ersten Bestätigung auf der Blockchain freigeschaltet (normalerweise innerhalb von 2–10 Minuten). Das anschließende automatische Upgrade dauert ca. 1–2 Minuten.\n\n` +
+    `Litecoin-Zahlungen werden ab der ersten Bestätigung auf der Blockchain freigeschaltet (normalerweise innerhalb von 2–10 Minuten). Das anschließende automatische Upgrade dauert ca. 5–30 Minuten.\n\n` +
     `*4. Support anfragen:*\n` +
-    `Bei Problemen mit deinem Upgrade wende dich bitte an den Support-Admin unter @SpotifyUpgradeAdmin. Gib dabei bitte deine Bestell-ID oder Telegram-ID an.`;
+    `Bei Problemen mit deinem Upgrade wende dich bitte an den Support-Admin unter @redo666redo. Gib dabei bitte deine Bestell-ID oder Telegram-ID an.`;
 
   await ctx.reply(faqText, { parse_mode: 'Markdown', ...getMainMenu() });
 });
@@ -685,7 +685,8 @@ bot.on('text', async (ctx) => {
     await ctx.telegram.deleteMessage(ctx.chat.id, waitMsg.message_id);
 
     if (upgradeRes.success) {
-      // Success! Update key status and subscription status
+      // The task was successfully registered at upgrader.cc!
+      // Keep status as 'activating' in the database and mark key as active
       await supabase
         .from('upgrader_keys')
         .update({
@@ -696,47 +697,37 @@ bot.on('text', async (ctx) => {
         })
         .eq('id', keyObj.id);
 
-      const expiresAt = new Date();
-      expiresAt.setMonth(expiresAt.getMonth() + sub.packages.duration_months);
-
-      await supabase
-        .from('subscriptions')
-        .update({
-          status: 'active',
-          expires_at: expiresAt.toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', sub.id);
-
       await ctx.reply(
-        `✅ *Premium-Upgrade erfolgreich!*\n\n` +
-        `Dein Spotify-Account wurde auf Premium hochgestuft.\n` +
-        `Laufzeit: ${sub.packages.duration_months} ${sub.packages.duration_months === 1 ? 'Monat' : 'Monate'}\n` +
-        `Ablaufdatum: ${expiresAt.toLocaleDateString('de-DE')}\n\n` +
-        `Viel Spaß mit werbefreier Musik! 🎧`,
+        `🔄 *Upgrade-Prozess läuft!* (Dauer: ca. 5–30 Minuten)\n\n` +
+        `Deine Zugangsdaten wurden verschlüsselt und an das System übertragen.\n` +
+        `Das Upgrade wird nun im Hintergrund ausgeführt. Wir überprüfen den Status fortlaufend und senden dir hier eine Benachrichtigung, sobald dein Premium-Upgrade aktiv ist! 🎧`,
         getMainMenu()
       );
     } else {
-      // Failed!
+      // Failed immediately!
       // Log to system logs
       await supabase.from('system_logs').insert({
         level: 'ERROR',
         component: 'API',
-        message: `Upgrader API Upgrade fehlgeschlagen für Sub ${sub.id}`,
+        message: `Upgrader API Upgrade sofort fehlgeschlagen für Sub ${sub.id}`,
         details: { key: keyObj.api_key, error: upgradeRes.message, email }
       });
 
-      // Update key error message (but keep it usable/active/error depending on the error type)
-      // If error is wrong password, key is still usable. If error is key-related, mark key as error.
       const isCredentialError = upgradeRes.message.toLowerCase().includes('password') || 
                                 upgradeRes.message.toLowerCase().includes('credential') || 
                                 upgradeRes.message.toLowerCase().includes('login') ||
-                                upgradeRes.message.toLowerCase().includes('incorrect');
+                                upgradeRes.message.toLowerCase().includes('incorrect') ||
+                                upgradeRes.message.toLowerCase().includes('invalid account details');
       
+      const isFamilyLimitError = upgradeRes.message.toLowerCase().includes('12 months') || 
+                                 upgradeRes.message.toLowerCase().includes('family limit') || 
+                                 upgradeRes.message.toLowerCase().includes('12 monate') ||
+                                 upgradeRes.message.toLowerCase().includes('once per year');
+
       await supabase
         .from('upgrader_keys')
         .update({
-          status: isCredentialError ? 'usable' : 'error',
+          status: (isCredentialError || isFamilyLimitError) ? 'usable' : 'error',
           error_message: upgradeRes.message,
           updated_at: new Date().toISOString()
         })
@@ -747,11 +738,25 @@ bot.on('text', async (ctx) => {
         .update({ status: 'failed', updated_at: new Date().toISOString() })
         .eq('id', sub.id);
 
-      await ctx.reply(
-        `❌ *Upgrade fehlgeschlagen!*\n\n` +
-        `Grund: ${upgradeRes.message}\n\n` +
-        `Bitte überprüfe dein Passwort und sende mir deine Daten erneut im Format \`E-Mail:Passwort\`.`
-      );
+      if (isCredentialError) {
+        await ctx.reply(
+          `❌ *Upgrade fehlgeschlagen!*\n\n` +
+          `Deine Spotify-Zugangsdaten (E-Mail oder Passwort) sind leider falsch.\n\n` +
+          `Bitte überprüfe dein Passwort und sende mir deine Daten erneut im Format \`E-Mail:Passwort\`.`
+        );
+      } else if (isFamilyLimitError) {
+        await ctx.reply(
+          `❌ *Upgrade fehlgeschlagen!*\n\n` +
+          `Dein Spotify-Account war in den letzten 12 Monaten bereits Teil einer Premium Family.\n\n` +
+          `⚠️ *WICHTIG:* Wegen der Spotify-Sperre musst du einen **anderen (neuen) Spotify-Account** verwenden. Bitte erstelle einen neuen Account und sende mir die Zugangsdaten im Format \`E-Mail:Passwort\`.`
+        );
+      } else {
+        await ctx.reply(
+          `⚠️ *Upgrade-Verzögerung:*\n\n` +
+          `Es gab ein technisches Problem bei der Aktivierung: \`${upgradeRes.message}\`.\n\n` +
+          `Der Support-Admin wurde benachrichtigt. Du kannst dich auch direkt an @redo666redo wenden.`
+        );
+      }
     }
   } catch (err) {
     console.error(err);
