@@ -2,6 +2,7 @@ const { supabase } = require('./db');
 const { decrypt } = require('./crypto');
 const { checkPayment } = require('./blockchain');
 const { renewAccount, getKeyInfo } = require('./upgrader');
+const { t } = require('./locales');
 
 // Initialize with bot instance for sending messages
 let telegramBot = null;
@@ -31,7 +32,7 @@ async function watchPayments() {
   try {
     const { data: invoices, error } = await supabase
       .from('invoices')
-      .select('*, ltc_addresses(ltc_address), subscriptions(user_id, users(telegram_id))')
+      .select('*, ltc_addresses(ltc_address), subscriptions(user_id, users(telegram_id, language))')
       .in('status', ['unpaid', 'detected']);
 
     if (error) throw error;
@@ -41,6 +42,7 @@ async function watchPayments() {
 
     for (const inv of invoices) {
       const telegramId = inv.subscriptions?.users?.telegram_id;
+      const language = inv.subscriptions?.users?.language || 'en';
       const address = inv.ltc_addresses?.ltc_address;
       
       // Handle Expiration
@@ -54,7 +56,7 @@ async function watchPayments() {
         await supabase.from('subscriptions').update({ status: 'expired' }).eq('id', inv.sub_id);
         
         if (telegramId) {
-          await notifyUser(telegramId, `❌ *Zahlungszeitraum abgelaufen!*\n\nDie Reservierung der Litecoin-Adresse für deine Bestellung ist abgelaufen. Bitte erstelle bei Bedarf eine neue Buchung.`);
+          await notifyUser(telegramId, t('notify_invoice_expired', language));
         }
         continue;
       }
@@ -74,11 +76,7 @@ async function watchPayments() {
 
             if (telegramId) {
               await notifyUser(telegramId, 
-                `✅ *Zahlung bestätigt!*\n\n` +
-                `Deine Zahlung von \`${inv.amount_ltc.toFixed(8)}\` LTC wurde erfolgreich verbucht.\n\n` +
-                `Bitte sende mir jetzt deine Spotify-Zugangsdaten im Format:\n` +
-                `\`E-Mail:Passwort\`\n\n` +
-                `z.B.: \`alex@gmail.com:Passwort123\``
+                t('pay_check_confirmed_success', language, { txHash: check.txHash.substring(0, 16) })
               );
             }
           } else if (inv.status === 'unpaid') {
@@ -89,10 +87,7 @@ async function watchPayments() {
 
             if (telegramId) {
               await notifyUser(telegramId, 
-                `⏳ *Zahlung in der Blockchain erkannt!*\n\n` +
-                `Betrag: \`${inv.amount_ltc.toFixed(8)}\` LTC\n` +
-                `Transaktions-Hash: \`${check.txHash.substring(0, 16)}...\`\n` +
-                `Wir warten auf 1 Bestätigung. Du wirst benachrichtigt, sobald das Upgrade freigeschaltet wird.`
+                t('pay_check_detected', language, { txHash: check.txHash.substring(0, 16) })
               );
             }
           }
@@ -115,7 +110,7 @@ async function checkExpirations() {
   try {
     const { data: expiredSubs, error } = await supabase
       .from('subscriptions')
-      .select('*, upgrader_keys(api_key), users(telegram_id)')
+      .select('*, upgrader_keys(api_key), users(telegram_id, language)')
       .eq('status', 'active')
       .lt('expires_at', new Date().toISOString());
 
@@ -141,18 +136,15 @@ async function checkExpirations() {
           await supabase.from('system_logs').insert({
             level: 'ERROR',
             component: 'API',
-            message: `Key-Freigabe für abgelaufene Subscription fehlgeschlagen`,
+            message: 'Key release for expired subscription failed',
             details: { sub_id: sub.id, key: sub.upgrader_keys.api_key, error: renewRes.message }
           });
         }
       }
 
       if (sub.users && sub.users.telegram_id) {
-        await notifyUser(sub.users.telegram_id, 
-          `⚠️ *Dein Spotify Premium Upgrade ist abgelaufen!*\n\n` +
-          `Die Laufzeit deines Abonnements ist beendet und dein Account wurde aus der Family-Gruppe entfernt.\n\n` +
-          `Du kannst jederzeit im Hauptmenü über *🛍️ Paket buchen* ein neues Upgrade bestellen!`
-        );
+        const language = sub.users?.language || 'en';
+        await notifyUser(sub.users.telegram_id, t('notify_expired', language));
       }
     }
   } catch (err) {
@@ -169,7 +161,7 @@ async function checkReplacements() {
   try {
     const { data: renewingSubs, error } = await supabase
       .from('subscriptions')
-      .select('*, upgrader_keys(*), users(telegram_id)')
+      .select('*, upgrader_keys(*), users(telegram_id, language)')
       .eq('status', 'renewing');
 
     if (error) throw error;
@@ -195,13 +187,8 @@ async function checkReplacements() {
 
           // Notify user to enter credentials for a new account
           if (sub.users && sub.users.telegram_id) {
-            await notifyUser(sub.users.telegram_id,
-              `♻️ *Ersatz-Key ist bereit!*\n\n` +
-              `Dein Upgrade-Key wurde erfolgreich zurückgesetzt und freigegeben.\n\n` +
-              `Bitte erstelle oder besorge einen *NEUEN, FRISCHEN Spotify-Account* (nicht den alten, da dieser für 12 Monate gesperrt ist!) und sende mir deine neuen Login-Daten im Format:\n` +
-              `\`E-Mail:Passwort\`\n\n` +
-              `z.B.: \`neueraccount@web.de:NeuesPasswort123\``
-            );
+            const language = sub.users?.language || 'en';
+            await notifyUser(sub.users.telegram_id, t('notify_replace_ready', language));
           }
         }
       } catch (err) {
@@ -222,7 +209,7 @@ async function watchUpgrades() {
   try {
     const { data: activatingSubs, error } = await supabase
       .from('subscriptions')
-      .select('*, upgrader_keys(*), packages(duration_months), users(telegram_id)')
+      .select('*, upgrader_keys(*), packages(*), users(telegram_id, language)')
       .eq('status', 'activating');
 
     if (error) throw error;
@@ -272,18 +259,18 @@ async function watchUpgrades() {
             .eq('id', key.id);
 
           if (telegramId) {
-            let successMsg = `✅ *Premium-Upgrade erfolgreich!*\n\n` +
-              `Dein Spotify-Account wurde auf Premium hochgestuft.\n`;
-            
-            if (isReplacement) {
-              successMsg += `• Laufzeit verlängert bis: *${expiresAt.toLocaleDateString('de-DE')} ${expiresAt.toLocaleTimeString('de-DE')} Uhr*\n` +
-                            `*(Inklusive 48h Ausgleichsgutschrift! 🎁)*\n\n`;
-            } else {
-              successMsg += `• Laufzeit: ${sub.packages.duration_months} ${sub.packages.duration_months === 1 ? 'Monat' : 'Monate'}\n` +
-                            `• Ablaufdatum: ${expiresAt.toLocaleDateString('de-DE')} ${expiresAt.toLocaleTimeString('de-DE')} Uhr\n\n`;
-            }
-            
-            successMsg += `Viel Spaß mit werbefreier Musik! 🎧`;
+            const language = sub.users?.language || 'en';
+            const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+            const localeStr = language === 'de' ? 'de-DE' : (language === 'ru' ? 'ru-RU' : 'en-US');
+            const dateStr = expiresAt.toLocaleString(localeStr, dateOptions);
+            const compMsg = isReplacement ? t('notify_upgrade_success_comp', language) : '';
+
+            const successMsg = t('notify_upgrade_success', language, {
+              email: sub.spotify_email,
+              pkgName: sub.packages?.name || '',
+              date: dateStr,
+              compMsg: compMsg
+            });
             
             await notifyUser(telegramId, successMsg);
           }
@@ -310,17 +297,14 @@ async function watchUpgrades() {
                                      errMsg.toLowerCase().includes('12 monate') ||
                                      errMsg.toLowerCase().includes('once per year');
 
+          const language = sub.users?.language || 'en';
           if (isCredentialError) {
             // Mark sub as failed so user can re-submit
             await supabase.from('subscriptions').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', sub.id);
             await supabase.from('upgrader_keys').update({ status: 'usable', error_message: errMsg, updated_at: new Date().toISOString() }).eq('id', key.id);
 
             if (telegramId) {
-              await notifyUser(telegramId,
-                `❌ *Upgrade fehlgeschlagen!*\n\n` +
-                `Deine Spotify-Zugangsdaten (E-Mail oder Passwort) sind leider falsch.\n\n` +
-                `Bitte überprüfe dein Passwort und sende mir deine Daten erneut im Format \`E-Mail:Passwort\`.`
-              );
+              await notifyUser(telegramId, t('upgrade_failed_credentials', language));
             }
           } else if (isFamilyLimitError) {
             // Mark sub as failed, user must supply a different account
@@ -328,11 +312,7 @@ async function watchUpgrades() {
             await supabase.from('upgrader_keys').update({ status: 'usable', error_message: errMsg, updated_at: new Date().toISOString() }).eq('id', key.id);
 
             if (telegramId) {
-              await notifyUser(telegramId,
-                `❌ *Upgrade fehlgeschlagen!*\n\n` +
-                `Dein Spotify-Account war in den letzten 12 Monaten bereits Teil einer Premium Family.\n\n` +
-                `⚠️ *WICHTIG:* Wegen der Spotify-Sperre musst du einen **anderen (neuen) Spotify-Account** verwenden. Bitte erstelle einen neuen Account und sende mir die Zugangsdaten im Format \`E-Mail:Passwort\`.`
-              );
+              await notifyUser(telegramId, t('upgrade_failed_family_limit', language));
             }
           } else {
             // Generic error, set status failed but notify user about delay
@@ -340,11 +320,7 @@ async function watchUpgrades() {
             await supabase.from('upgrader_keys').update({ status: 'error', error_message: errMsg, updated_at: new Date().toISOString() }).eq('id', key.id);
 
             if (telegramId) {
-              await notifyUser(telegramId,
-                `⚠️ *Upgrade-Verzögerung:*\n\n` +
-                `Es gab ein technisches Problem bei der Aktivierung: \`${errMsg}\`.\n\n` +
-                `Der Support-Admin wurde benachrichtigt. Du kannst dich auch direkt an @redo666redo wenden.`
-              );
+              await notifyUser(telegramId, t('upgrade_failed_technical', language, { error: errMsg }));
             }
           }
         }

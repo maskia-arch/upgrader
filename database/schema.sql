@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS users (
     telegram_id BIGINT UNIQUE NOT NULL,
     username TEXT,
     flags INTEGER NOT NULL DEFAULT 0,
+    language TEXT NOT NULL DEFAULT 'en' CHECK (language IN ('en', 'de', 'ru')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

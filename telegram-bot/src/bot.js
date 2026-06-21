@@ -4,6 +4,7 @@ const { supabase } = require('./db');
 const { encrypt, decrypt } = require('./crypto');
 const { fetchLtcPrice, checkPayment } = require('./blockchain');
 const { upgradeAccount, renewAccount } = require('./upgrader');
+const { t } = require('./locales');
 
 const bot = new Telegraf(config.telegramToken);
 
@@ -19,10 +20,19 @@ async function getOrCreateUser(ctx) {
     .single();
 
   if (error && error.code === 'PGRST116') {
+    // Detect Telegram language code
+    let initialLang = 'en';
+    const tgLang = ctx.from.language_code || '';
+    if (tgLang.startsWith('de')) {
+      initialLang = 'de';
+    } else if (tgLang.startsWith('ru')) {
+      initialLang = 'ru';
+    }
+
     // User does not exist, insert them
     const { data: newUser, error: insertError } = await supabase
       .from('users')
-      .insert({ telegram_id: telegramId, username })
+      .insert({ telegram_id: telegramId, username, language: initialLang })
       .select()
       .single();
 
@@ -51,10 +61,10 @@ async function getOrCreateUser(ctx) {
 }
 
 // Main menu layout
-const getMainMenu = () => {
+const getMainMenu = (lang = 'en') => {
   return Markup.keyboard([
-    ['🛍️ Paket buchen', '📂 Meine Abonnements'],
-    ['❓ Support / FAQ']
+    [t('menu_book_package', lang), t('menu_my_subscriptions', lang)],
+    [t('menu_support_faq', lang), t('menu_language', lang)]
   ]).resize();
 };
 
@@ -62,31 +72,32 @@ const getMainMenu = () => {
 bot.start(async (ctx) => {
   try {
     const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
     await ctx.reply(
-      `👋 Hallo ${ctx.from.first_name || 'Kunde'}!\n\n` +
-      `Willkommen beim *Spotify Premium Upgrade System*.\n` +
-      `Hier kannst du deinen bestehenden Spotify-Account schnell und unkompliziert auf Premium upgraden.\n\n` +
-      `Wähle unten eine Option aus, um zu starten!`,
-      { parse_mode: 'Markdown', ...getMainMenu() }
+      t('start_welcome', lang, { name: ctx.from.first_name || 'Customer' }),
+      { parse_mode: 'Markdown', ...getMainMenu(lang) }
     );
   } catch (error) {
-    ctx.reply('❌ Ein Fehler ist aufgetreten. Bitte versuche es später noch einmal.');
+    console.error('[BOT ERROR] Start failed:', error);
+    ctx.reply(t('start_error', 'en'));
   }
 });
 
 // Main menu text handlers
 // Register Bot Commands Menu
 bot.telegram.setMyCommands([
-  { command: 'start', description: 'Startet den Bot und öffnet das Hauptmenü' },
-  { command: 'paket', description: '🛍️ Spotify Premium Paket buchen' },
-  { command: 'abos', description: '📂 Meine Abonnements anzeigen' },
-  { command: 'faq', description: '❓ Support & FAQ anzeigen' }
+  { command: 'start', description: 'Start the bot / Bot starten' },
+  { command: 'packages', description: '🛍️ Book Spotify Premium package' },
+  { command: 'subscriptions', description: '📂 Show my subscriptions' },
+  { command: 'faq', description: '❓ Show Support & FAQ' },
+  { command: 'language', description: '🌐 Change language / Sprache ändern' }
 ]);
 
 // Helper Functions for Common bot views
 async function handleShowPackages(ctx) {
   try {
-    await getOrCreateUser(ctx);
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
     
     // Fetch packages
     const { data: packages, error } = await supabase
@@ -95,15 +106,22 @@ async function handleShowPackages(ctx) {
       .order('price_eur', { ascending: true });
 
     if (error || !packages || packages.length === 0) {
-      return ctx.reply('⚠️ Derzeit sind keine Upgrade-Pakete verfügbar. Bitte wende dich an den Support.');
+      return ctx.reply(t('packages_error', lang));
     }
 
-    let msg = '🛍️ *Wähle ein Spotify Premium Paket aus:*\n\n';
-        const buttons = [];
+    let msg = t('packages_title', lang);
+    const buttons = [];
 
     packages.forEach(pkg => {
-      msg += `• *${pkg.name}*\n  Laufzeit: ${pkg.duration_months} ${pkg.duration_months === 1 ? 'Monat' : 'Monate'}\n  Preis: ${pkg.price_eur.toFixed(2)} EUR\n\n`;
-      buttons.push([Markup.button.callback(`🟢 Jetzt buchen: ${pkg.name} (${pkg.price_eur.toFixed(2)}€)`, `buy_${pkg.id}`)]);
+      const durationStr = pkg.duration_months === 1 
+        ? t('packages_duration_one', lang) 
+        : t('packages_duration_multi', lang, { months: pkg.duration_months });
+
+      msg += t('packages_price', lang, { duration: durationStr, price: pkg.price_eur.toFixed(2) });
+      buttons.push([Markup.button.callback(
+        t('packages_book_now_btn', lang, { name: pkg.name, price: pkg.price_eur.toFixed(2) }), 
+        `buy_${pkg.id}`
+      )]);
     });
 
     await ctx.reply(msg, {
@@ -111,13 +129,15 @@ async function handleShowPackages(ctx) {
       ...Markup.inlineKeyboard(buttons)
     });
   } catch (err) {
-    ctx.reply('❌ Fehler beim Laden der Pakete.');
+    console.error(err);
+    ctx.reply(t('packages_error', 'en'));
   }
 }
 
 async function handleShowSubscriptions(ctx) {
   try {
     const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
     
     const { data: subs, error } = await supabase
       .from('subscriptions')
@@ -126,39 +146,63 @@ async function handleShowSubscriptions(ctx) {
       .order('created_at', { ascending: false });
 
     if (error || !subs || subs.length === 0) {
-      return ctx.reply('📂 Du hast aktuell keine aktiven oder vergangenen Abonnements.', getMainMenu());
+      return ctx.reply(t('subs_empty', lang), getMainMenu(lang));
     }
 
-    await ctx.reply('📂 *Deine Abonnements:*', { parse_mode: 'Markdown' });
+    await ctx.reply(t('subs_title', lang), { parse_mode: 'Markdown' });
 
     for (const sub of subs) {
       let statusIcon = '⏳';
       let statusTxt = sub.status;
-      if (sub.status === 'active') { statusIcon = '✅'; statusTxt = 'Aktiv'; }
-      else if (sub.status === 'expired') { statusIcon = '❌'; statusTxt = 'Abgelaufen'; }
-      else if (sub.status === 'pending_payment') { statusIcon = '💳'; statusTxt = 'Zahlung ausstehend'; }
-      else if (sub.status === 'activating') { statusIcon = '🔄'; statusTxt = 'Wird aktiviert / Wartet auf Daten'; }
-      else if (sub.status === 'renewing') { statusIcon = '♻️'; statusTxt = 'Ersatz wird verarbeitet'; }
-      else if (sub.status === 'failed') { statusIcon = '⚠️'; statusTxt = 'Fehlgeschlagen'; }
+      if (sub.status === 'active') { 
+        statusIcon = '✅'; 
+        statusTxt = t('status_active', lang); 
+      }
+      else if (sub.status === 'expired') { 
+        statusIcon = '❌'; 
+        statusTxt = t('status_expired', lang); 
+      }
+      else if (sub.status === 'pending_payment') { 
+        statusIcon = '💳'; 
+        statusTxt = t('status_pending_payment', lang); 
+      }
+      else if (sub.status === 'activating') { 
+        statusIcon = '🔄'; 
+        statusTxt = t('status_activating', lang); 
+      }
+      else if (sub.status === 'renewing') { 
+        statusIcon = '♻️'; 
+        statusTxt = t('status_renewing', lang); 
+      }
+      else if (sub.status === 'failed') { 
+        statusIcon = '⚠️'; 
+        statusTxt = t('status_failed', lang); 
+      }
 
-      let subInfo = `${statusIcon} *Paket: ${sub.packages.name}*\n` +
-        `• Status: *${statusTxt}*\n` +
-        `• Account: \`${sub.spotify_email || 'Noch nicht angegeben'}\`\n`;
+      const emailVal = sub.spotify_email || (lang === 'de' ? 'Noch nicht angegeben' : lang === 'ru' ? 'Еще не указан' : 'Not specified yet');
+
+      let subInfo = t('sub_info_format', lang, {
+        statusIcon,
+        name: sub.packages.name,
+        status: statusTxt,
+        email: emailVal
+      });
 
       if (sub.expires_at) {
-        subInfo += `• Läuft ab: ${new Date(sub.expires_at).toLocaleDateString('de-DE')}\n`;
+        const formattedDate = new Date(sub.expires_at).toLocaleDateString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US');
+        subInfo += t('sub_info_expires', lang, { date: formattedDate });
       }
 
       const buttons = [];
       
       if (sub.status === 'pending_payment') {
-        buttons.push([Markup.button.callback('🔵 Zahlungsdetails anzeigen', `pay_details_${sub.id}`)]);
+        buttons.push([Markup.button.callback(t('subs_details_btn', lang), `pay_details_${sub.id}`)]);
       } else if (sub.status === 'active') {
-        buttons.push([Markup.button.callback('🟡 Ersatz anfragen (Kick/Fehler)', `replace_ask_${sub.id}`)]);
+        buttons.push([Markup.button.callback(t('subs_replace_btn', lang), `replace_ask_${sub.id}`)]);
       } else if (sub.status === 'activating') {
-        buttons.push([Markup.button.callback('🟢 Login-Daten eingeben', `enter_credentials_${sub.id}`)]);
+        buttons.push([Markup.button.callback(t('subs_enter_credentials_btn', lang), `enter_credentials_${sub.id}`)]);
       } else if (sub.status === 'failed') {
-        buttons.push([Markup.button.callback('🟡 Daten erneut eingeben', `enter_credentials_${sub.id}`)]);
+        buttons.push([Markup.button.callback(t('subs_reenter_credentials_btn', lang), `enter_credentials_${sub.id}`)]);
       }
 
       await ctx.reply(subInfo, {
@@ -168,36 +212,86 @@ async function handleShowSubscriptions(ctx) {
     }
   } catch (err) {
     console.error(err);
-    ctx.reply('❌ Fehler beim Laden deiner Abonnements.');
+    ctx.reply(t('subs_error', 'en'));
   }
 }
 
 async function handleShowFAQ(ctx) {
-  const faqText = 
-    `❓ *Support & Häufig gestellte Fragen (FAQ)*\n\n` +
-    `*1. Wie funktioniert das Upgrade?*\n` +
-    `Nachdem deine Krypto-Zahlung bestätigt wurde, wirst du vom Bot aufgefordert, deine Spotify-Zugangsdaten einzugeben. Das System meldet sich an und fügt deinen Account automatisch einem Premium Family Plan hinzu. Deine Playlist und Musikdaten bleiben erhalten!\n\n` +
-    `*2. Warum muss ich einen neuen Account angeben, falls mein Premium vorzeitig beendet wird?*\n` +
-    `⚠️ *WICHTIG:* Spotify schränkt den Wechsel von Family-Plänen streng auf *einmal pro 12 Monate* ein. Wenn du aus einer Familie entfernt wirst, kann derselbe Account in den nächsten 12 Monaten keiner neuen Familie mehr beitreten. Du musst in diesem Fall zwingend einen *neuen, frischen Spotify-Account* angeben, um deinen Ersatz zu erhalten.\n` +
-    `*Tipp:* Als Kompensation für den Ausfall schreiben wir deiner verbleibenden Laufzeit bei jedem berechtigten Ersatz automatisch *48 Stunden* gut! 🎁\n\n` +
-    `*3. Wie lange dauert die Freischaltung?*\n` +
-    `Litecoin-Zahlungen werden ab der ersten Bestätigung auf der Blockchain freigeschaltet (normalerweise innerhalb von 2–10 Minuten). Das anschließende automatische Upgrade dauert ca. 5–30 Minuten.\n\n` +
-    `*4. Gibt es Regeln für das Anfordern von Ersatz?*\n` +
-    `⚠️ *Ja.* Bitte fordere Ersatz nur an, wenn dein Premium tatsächlich nicht mehr funktioniert. Fälschliches Anfordern von Ersatz (z.B. wenn Premium noch aktiv ist) führt zu einem systemseitigen *Flag (Verwarnung)*. Bei *3 Flags* wird die Bearbeitung von Ersatzanfragen für deinen Key dauerhaft gesperrt.\n\n` +
-    `*5. Support anfragen:*\n` +
-    `Bei Problemen mit deinem Upgrade wende dich bitte an den Support-Admin unter @redo666redo. Gib dabei bitte deine Bestell-ID oder Telegram-ID an.`;
+  try {
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+    await ctx.reply(t('faq_text', lang), { parse_mode: 'Markdown', ...getMainMenu(lang) });
+  } catch (err) {
+    console.error(err);
+  }
+}
 
-  await ctx.reply(faqText, { parse_mode: 'Markdown', ...getMainMenu() });
+async function handleShowLanguage(ctx) {
+  try {
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+    await ctx.reply(t('lang_selection_prompt', lang), {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback('🇺🇸 English', 'set_lang_en'),
+          Markup.button.callback('🇩🇪 Deutsch', 'set_lang_de'),
+          Markup.button.callback('🇷🇺 Русский', 'set_lang_ru')
+        ]
+      ])
+    });
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 // Command and hears handlers mapping
-bot.command('paket', handleShowPackages);
-bot.command('abos', handleShowSubscriptions);
+bot.command(['paket', 'packages'], handleShowPackages);
+bot.command(['abos', 'subscriptions'], handleShowSubscriptions);
 bot.command('faq', handleShowFAQ);
+bot.command(['language', 'sprache', 'lang'], handleShowLanguage);
 
-bot.hears('🛍️ Paket buchen', handleShowPackages);
-bot.hears('📂 Meine Abonnements', handleShowSubscriptions);
-bot.hears('❓ Support / FAQ', handleShowFAQ);
+// Multilingual Button listens (hears)
+const hearsMap = {
+  // English
+  '🛍️ Book Package': handleShowPackages,
+  '📂 My Subscriptions': handleShowSubscriptions,
+  '❓ Support / FAQ': handleShowFAQ,
+  '🌐 Language': handleShowLanguage,
+  // German
+  '🛍️ Paket buchen': handleShowPackages,
+  '📂 Meine Abonnements': handleShowSubscriptions,
+  '🌐 Sprache': handleShowLanguage,
+  // Russian
+  '🛍️ Заказать пакет': handleShowPackages,
+  '📂 Мои подписки': handleShowSubscriptions,
+  '❓ Поддержка / FAQ': handleShowFAQ,
+  '🌐 Выбор языка': handleShowLanguage
+};
+
+Object.keys(hearsMap).forEach(btnText => {
+  bot.hears(btnText, hearsMap[btnText]);
+});
+
+// Action: Set Language
+bot.action(/^set_lang_(en|de|ru)$/, async (ctx) => {
+  const selectedLang = ctx.match[1];
+  try {
+    await ctx.answerCbQuery();
+    const user = await getOrCreateUser(ctx);
+    
+    // Update language in DB
+    await supabase
+      .from('users')
+      .update({ language: selectedLang })
+      .eq('id', user.id);
+
+    await ctx.reply(t('lang_changed', selectedLang), getMainMenu(selectedLang));
+  } catch (err) {
+    console.error('[BOT ERROR] Set language failed:', err);
+    ctx.reply('Error updating language / Fehler beim Ändern der Sprache / Ошибка при изменении языка');
+  }
+});
 
 // Inline Action: Select Package
 bot.action(/^buy_(.+)$/, async (ctx) => {
@@ -205,6 +299,7 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
     const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
 
     // Fetch package details
     const { data: pkg, error: pkgError } = await supabase
@@ -214,11 +309,11 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
       .single();
 
     if (pkgError || !pkg) {
-      return ctx.reply('⚠️ Paket nicht gefunden.');
+      return ctx.reply(t('buy_pkg_not_found', lang));
     }
 
     // Inform user of conversion and processing
-    const statusMsg = await ctx.reply('⏳ Generiere Zahlungsinformationen. Bitte warten...');
+    const statusMsg = await ctx.reply(t('invoice_generating', lang));
 
     // 1. Fetch LTC Price
     let ltcRate;
@@ -226,18 +321,15 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
       ltcRate = await fetchLtcPrice();
     } catch (e) {
       await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
-      return ctx.reply('⚠️ Der Kurs-API-Dienst ist derzeit nicht erreichbar. Bitte versuche es gleich noch einmal.');
+      return ctx.reply(t('buy_rate_api_error', lang));
     }
 
     const amountLtc = parseFloat((pkg.price_eur / ltcRate).toFixed(8));
 
     // 2. Rotate Litecoin Address Pool atomically using transaction logic
-    // We execute RPC or query through Supabase directly using PostgreSQL functions or client-side transaction
-    // Let's implement client-side transaction logic with SELECT FOR UPDATE SKIP LOCKED
     const { data: addresses, error: addrError } = await supabase
       .rpc('rotate_ltc_address'); 
     
-    // Note: To support standard supabase API without RPC setup, let's fall back to standard select/update if RPC is missing
     let selectedAddressObj = null;
     if (!addrError && addresses && addresses.length > 0) {
       selectedAddressObj = addresses[0];
@@ -253,7 +345,7 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
 
       if (fallbackError || !fallbackAddrs || fallbackAddrs.length === 0) {
         await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
-        return ctx.reply('⚠️ Derzeit ist keine Litecoin-Zahlungsadresse im Pool frei. Bitte wende dich an den Support.');
+        return ctx.reply(t('buy_no_address_free', lang));
       }
 
       selectedAddressObj = fallbackAddrs[0];
@@ -271,7 +363,7 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
 
       if (updateError) {
         await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
-        return ctx.reply('⚠️ Reservierungsfehler. Bitte versuche es erneut.');
+        return ctx.reply(t('buy_reservation_error', lang));
       }
     }
 
@@ -295,7 +387,7 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
         .eq('id', selectedAddressObj.id);
 
       await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
-      return ctx.reply('❌ Fehler beim Erstellen der Bestellung.');
+      return ctx.reply(t('buy_order_creation_error', lang));
     }
 
     // 4. Create Invoice
@@ -323,7 +415,7 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
         .eq('id', selectedAddressObj.id);
 
       await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
-      return ctx.reply('❌ Fehler beim Erstellen der Rechnung.');
+      return ctx.reply(t('buy_invoice_creation_error', lang));
     }
 
     await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
@@ -332,31 +424,31 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
     await sendPaymentInvoice(ctx, sub.id, invoice, selectedAddressObj.ltc_address, pkg.name);
   } catch (err) {
     console.error(err);
-    ctx.reply('❌ Interner Systemfehler beim Buchen.');
+    ctx.reply(t('invoice_internal_error', 'en'));
   }
 });
 
 // Helper function to display payment invoice
 async function sendPaymentInvoice(ctx, subId, invoice, address, packageName) {
-  const msg = 
-    `💳 *Zahlungsanforderung für ${packageName}*\n\n` +
-    `Bitte sende den exakten LTC-Betrag an die unten angegebene Adresse. Die Zahlung wird automatisch alle 2 Minuten überprüft.\n\n` +
-    `• *LTC Betrag:* \`${invoice.amount_ltc.toFixed(8)}\` LTC\n` +
-    `• *EUR Wert:* ${invoice.amount_eur.toFixed(2)} EUR\n` +
-    `• *LTC Adresse:* \`${address}\`\n\n` +
-    `⏳ Die Adresse ist reserviert bis: *${new Date(invoice.expires_at).toLocaleTimeString('de-DE')} Uhr*\n` +
-    `*WICHTIG:* Sende genau den geforderten Betrag. Nach Ablauf der Reservierung verfällt die Rechnung.`;
+  const user = await getOrCreateUser(ctx);
+  const lang = user.language || 'en';
+  
+  const timeFormatted = new Date(invoice.expires_at).toLocaleTimeString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US');
+  
+  const msg = t('invoice_text', lang, {
+    name: packageName,
+    amountLtc: invoice.amount_ltc.toFixed(8),
+    amountEur: invoice.amount_eur.toFixed(2),
+    address: address,
+    time: timeFormatted
+  });
 
   const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback('🟢 Zahlung jetzt prüfen', `check_pay_${invoice.id}`)],
-    [Markup.button.callback('🔴 Zahlung stornieren', `cancel_pay_${invoice.id}`)]
+    [Markup.button.callback(t('invoice_check_btn', lang), `check_pay_${invoice.id}`)],
+    [Markup.button.callback(t('invoice_cancel_btn', lang), `cancel_pay_${invoice.id}`)]
   ]);
 
-  if (ctx.callbackQuery) {
-    await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
-  } else {
-    await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
-  }
+  await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
 }
 
 // Action: Display Payment Details
@@ -364,6 +456,8 @@ bot.action(/^pay_details_(.+)$/, async (ctx) => {
   const subId = ctx.match[1];
   try {
     await ctx.answerCbQuery();
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
     
     // Fetch latest invoice for subscription
     const { data: invoice, error: invError } = await supabase
@@ -376,7 +470,7 @@ bot.action(/^pay_details_(.+)$/, async (ctx) => {
       .single();
 
     if (invError || !invoice) {
-      return ctx.reply('⚠️ Keine aktive unbezahlte Rechnung für dieses Abonnement gefunden.');
+      return ctx.reply(t('pay_details_no_invoice', lang));
     }
 
     await sendPaymentInvoice(
@@ -387,7 +481,8 @@ bot.action(/^pay_details_(.+)$/, async (ctx) => {
       invoice.subscriptions.packages.name
     );
   } catch (err) {
-    ctx.reply('❌ Fehler beim Abrufen der Rechnungsdaten.');
+    const user = await getOrCreateUser(ctx);
+    ctx.reply(t('pay_details_error', user.language || 'en'));
   }
 });
 
@@ -396,6 +491,9 @@ bot.action(/^cancel_pay_(.+)$/, async (ctx) => {
   const invoiceId = ctx.match[1];
   try {
     await ctx.answerCbQuery();
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+
     const { data: invoice, error } = await supabase
       .from('invoices')
       .select('*')
@@ -403,7 +501,7 @@ bot.action(/^cancel_pay_(.+)$/, async (ctx) => {
       .single();
 
     if (error || !invoice || invoice.status !== 'unpaid') {
-      return ctx.reply('⚠️ Diese Rechnung kann nicht storniert werden.');
+      return ctx.reply(t('pay_cancel_not_allowed', lang));
     }
 
     // Update invoice and release address
@@ -422,9 +520,10 @@ bot.action(/^cancel_pay_(.+)$/, async (ctx) => {
       .update({ status: 'expired' })
       .eq('id', invoice.sub_id);
 
-    await ctx.reply('❌ Zahlung storniert. Das Abonnement wurde als abgelaufen markiert.', getMainMenu());
+    await ctx.reply(t('pay_cancel_success', lang), getMainMenu(lang));
   } catch (err) {
-    ctx.reply('❌ Stornierung fehlgeschlagen.');
+    const user = await getOrCreateUser(ctx);
+    ctx.reply(t('pay_cancel_error', user.language || 'en'));
   }
 });
 
@@ -432,7 +531,10 @@ bot.action(/^cancel_pay_(.+)$/, async (ctx) => {
 bot.action(/^check_pay_(.+)$/, async (ctx) => {
   const invoiceId = ctx.match[1];
   try {
-    await ctx.answerCbQuery('Prüfe Zahlung...');
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+
+    await ctx.answerCbQuery();
     
     const { data: invoice, error } = await supabase
       .from('invoices')
@@ -441,11 +543,11 @@ bot.action(/^check_pay_(.+)$/, async (ctx) => {
       .single();
 
     if (error || !invoice) {
-      return ctx.reply('⚠️ Rechnung nicht gefunden.');
+      return ctx.reply(t('pay_check_invoice_not_found', lang));
     }
 
     if (invoice.status === 'confirmed') {
-      return ctx.reply('✅ Diese Rechnung wurde bereits bezahlt und bestätigt!');
+      return ctx.reply(t('pay_check_confirmed', lang));
     }
 
     // Call blockchain check
@@ -470,10 +572,7 @@ bot.action(/^check_pay_(.+)$/, async (ctx) => {
           .eq('id', invoice.sub_id);
 
         await ctx.reply(
-          `✅ *Zahlung bestätigt!* (TX: \`${check.txHash.substring(0, 10)}...\`)\n\n` +
-          `Dein Paket ist nun bereit. Bitte sende mir jetzt deine Spotify-Zugangsdaten im Format:\n` +
-          `\`E-Mail:Passwort\`\n\n` +
-          `z.B.: \`alex@gmail.com:Passwort123\``,
+          t('pay_check_confirmed_success', lang, { txHash: check.txHash.substring(0, 10) }),
           { parse_mode: 'Markdown' }
         );
       } else {
@@ -484,16 +583,16 @@ bot.action(/^check_pay_(.+)$/, async (ctx) => {
           .eq('id', invoiceId);
 
         await ctx.reply(
-          `⏳ *Zahlung in der Blockchain erkannt!*\n\n` +
-          `Transaktions-Hash: \`${check.txHash.substring(0, 16)}...\`\n` +
-          `Wir warten auf 1 Bestätigung. Der Bot informiert dich sofort, wenn das Upgrade bereit ist.`
+          t('pay_check_detected', lang, { txHash: check.txHash.substring(0, 16) }),
+          { parse_mode: 'Markdown' }
         );
       }
     } else {
-      ctx.reply('❌ Noch kein passender Zahlungseingang gefunden. Bitte warte einen Moment und versuche es erneut.');
+      ctx.reply(t('pay_check_no_tx', lang));
     }
   } catch (err) {
-    ctx.reply('❌ Fehler bei der Zahlungsprüfung.');
+    const user = await getOrCreateUser(ctx);
+    ctx.reply(t('pay_check_error', user.language || 'en'));
   }
 });
 
@@ -502,32 +601,29 @@ bot.action(/^replace_ask_(.+)$/, async (ctx) => {
   const subId = ctx.match[1];
   try {
     await ctx.answerCbQuery();
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+
     await ctx.reply(
-      `⚠️ *Ersatz für dieses Abonnement anfragen?*\n\n` +
-      `Nutze diese Option nur, wenn du vorzeitig aus der Family geworfen wurdest oder dein Premium nicht mehr funktioniert.\n\n` +
-      `*⚠️ WICHTIGER HINWEIS:* Das fälschliche Anfordern von Ersatz (z.B. wenn Premium auf deinem Account noch aktiv ist) wird systemseitig mit einem Flag (Verwarnung) belegt. Bei 3 Flags wirst du für jegliche zukünftige Ersatzanfragen dieses Keys gesperrt!\n\n` +
-      `*Ablauf:*\n` +
-      `1. Dein Key wird zurückgesetzt.\n` +
-      `2. Du wirst aufgefordert, neue Daten für einen *NEUEN* Spotify-Account einzugeben.\n\n` +
-      `*Kompensation:*\n` +
-      `Als Entschädigung für den Ausfall schreiben wir deiner verbleibenden Laufzeit bei erfolgreichem Upgrade automatisch *48 Stunden extra* gut! 🎁\n\n` +
-      `*WICHTIG:* Dein bestehender Account kann nicht noch einmal geupgradet werden (Spotify-Sperre: 1 Wechsel pro 12 Monate!).`,
+      t('replace_ask_text', lang),
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [Markup.button.callback('🟢 Ja, Ersatz anfordern', `replace_confirm_${subId}`)],
-          [Markup.button.callback('🔴 Abbrechen', 'cancel_replace')]
+          [Markup.button.callback(t('replace_ask_confirm_btn', lang), `replace_confirm_${subId}`)],
+          [Markup.button.callback(t('replace_ask_cancel_btn', lang), 'cancel_replace')]
         ])
       }
     );
   } catch (err) {
-    ctx.reply('❌ Fehler.');
+    ctx.reply('❌ Error / Fehler / Ошибка');
   }
 });
 
 bot.action('cancel_replace', async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.reply('Vorgang abgebrochen.', getMainMenu());
+  const user = await getOrCreateUser(ctx);
+  const lang = user.language || 'en';
+  await ctx.reply(t('replace_ask_cancel_msg', lang), getMainMenu(lang));
 });
 
 // Action: Confirm Replace
@@ -539,22 +635,21 @@ bot.action(/^replace_confirm_(.+)$/, async (ctx) => {
     // Fetch subscription, key, and user info (including flags)
     const { data: sub, error } = await supabase
       .from('subscriptions')
-      .select('*, upgrader_keys(api_key), users(flags, telegram_id)')
+      .select('*, upgrader_keys(api_key), users(flags, telegram_id, language)')
       .eq('id', subId)
       .single();
 
     if (error || !sub || sub.status !== 'active') {
-      return ctx.reply('⚠️ Nur aktive Abonnements können reklamiert werden.');
+      const user = await getOrCreateUser(ctx);
+      return ctx.reply(t('replace_confirm_not_active', user.language || 'en'));
     }
+
+    const lang = sub.users?.language || 'en';
 
     // Check if the user is banned due to too many flags
     const currentFlags = (sub.users && sub.users.flags) || 0;
     if (currentFlags >= 3) {
-      return ctx.reply(
-        `❌ *Aktion gesperrt!*\n\n` +
-        `Du hast das Limit von 3 Verwarnungen (Flags) wegen missbräuchlicher Ersatzanfragen erreicht.\n` +
-        `Weitere Ersatzanfragen für diesen Key/Account können nicht mehr bearbeitet werden.`
-      );
+      return ctx.reply(t('replace_blocked', lang));
     }
 
     let isPremiumActive = false;
@@ -594,12 +689,7 @@ bot.action(/^replace_confirm_(.+)$/, async (ctx) => {
         details: { sub_id: sub.id, key: sub.upgrader_keys?.api_key, current_flags: newFlags }
       });
 
-      return ctx.reply(
-        `⚠️ *Ersatz fehlgeschlagen: Premium noch aktiv!*\n\n` +
-        `Laut Spotify-Schnittstelle ist Premium auf deinem Account noch aktiv. Du hast ein systemseitiges Flag erhalten.\n\n` +
-        `*Status:* ${newFlags}/3 Flags.\n` +
-        `Bei 3 Flags wirst du für weitere Ersatzanfragen gesperrt!`
-      );
+      return ctx.reply(t('replace_error_still_active', lang, { flags: newFlags }));
     }
 
     // Set subscription status to renewing
@@ -619,24 +709,25 @@ bot.action(/^replace_confirm_(.+)$/, async (ctx) => {
       });
     }
 
-    await ctx.reply(
-      `♻️ *Ersatz-Prozess gestartet!*\n\n` +
-      `Dein Key wird zurückgesetzt. Wir prüfen den Status alle 5 Minuten. Sobald dein Slot wieder freigegeben ist, senden wir dir hier eine Benachrichtigung, damit du deine neuen Spotify-Account-Daten eingeben kannst.`
-    );
+    await ctx.reply(t('replace_started', lang));
   } catch (err) {
     console.error('[BOT ERROR] Replace confirm error:', err);
-    ctx.reply('❌ Ersatz-Anfrage fehlgeschlagen.');
+    const user = await getOrCreateUser(ctx);
+    ctx.reply(t('replace_error', user.language || 'en'));
   }
 });
 
 // Action: Enter Credentials
 bot.action(/^enter_credentials_(.+)$/, async (ctx) => {
   const subId = ctx.match[1];
-  await ctx.answerCbQuery();
-  await ctx.reply(
-    `✏️ Bitte gib deine Spotify-Zugangsdaten im Format \`E-Mail:Passwort\` ein (z.B. \`spotify@mail.com:MeinPasswort123\`).\n\n` +
-    `*WICHTIG:* Falls du Ersatz angefordert hast, erstelle zwingend einen *NEUEN* Spotify-Account, da Spotify Accounts nur alle 12 Monate einen Family-Plan wechseln können!`
-  );
+  try {
+    await ctx.answerCbQuery();
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+    await ctx.reply(t('credentials_prompt', lang));
+  } catch (err) {
+    console.error('[BOT ERROR] Enter credentials error:', err);
+  }
 });
 
 // Regex handler for "email:password" (credentials)
@@ -644,16 +735,17 @@ bot.on('text', async (ctx) => {
   const text = ctx.message.text.trim();
   const match = text.match(/^([^:]+):(.+)$/);
 
-  if (!match) {
-    // Normal text message, reply with main menu instructions
-    return ctx.reply('Bitte wähle eine Option aus dem Menü oder folge den Anweisungen.', getMainMenu());
-  }
-
-  const email = match[1].trim();
-  const password = match[2].trim();
-
   try {
     const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+
+    if (!match) {
+      // Normal text message, reply with main menu instructions
+      return ctx.reply(t('text_help', lang), getMainMenu(lang));
+    }
+
+    const email = match[1].trim();
+    const password = match[2].trim();
 
     // Find any subscription for this user that is waiting for credentials (status in activating, renewing, failed)
     const { data: sub, error } = await supabase
@@ -666,7 +758,7 @@ bot.on('text', async (ctx) => {
       .single();
 
     if (error || !sub) {
-      return ctx.reply('⚠️ Du hast aktuell kein Abonnement, das auf die Eingabe von Zugangsdaten wartet.', getMainMenu());
+      return ctx.reply(t('credentials_not_waiting', lang), getMainMenu(lang));
     }
 
     // Check if it is "renewing" and waiting for key release
@@ -674,14 +766,11 @@ bot.on('text', async (ctx) => {
       // We must check if the key is usable in the database first.
       // If the worker has not marked it as usable (meaning upgrader.cc is still processing the release), we reject credentials.
       if (sub.upgrader_keys && sub.upgrader_keys.status !== 'usable') {
-        return ctx.reply(
-          `⏳ *Der Key ist noch nicht wieder einsatzbereit.*\n\n` +
-          `Upgrader.cc gibt den Slot momentan frei. Bitte warte, bis du vom Bot die Benachrichtigung erhältst, dass der Key bereit ist.`
-        );
+        return ctx.reply(t('replace_key_not_ready', lang));
       }
     }
 
-    const waitMsg = await ctx.reply('🔄 Verschlüssele Zugangsdaten und starte Premium-Upgrade bei upgrader.cc. Bitte warten...');
+    const waitMsg = await ctx.reply(t('credentials_checking', lang));
 
     // Encrypt password
     const encryptedPassword = encrypt(password);
@@ -735,12 +824,7 @@ bot.on('text', async (ctx) => {
           .update({ status: 'failed' })
           .eq('id', sub.id);
 
-        return ctx.reply(
-          `⚠️ *Upgrade-Verzögerung:*\n\n` +
-          `Aktuell sind keine freien Upgrade-Keys verfügbar. Der Admin wurde benachrichtigt und wird in Kürze neue Keys einpflegen oder dein Upgrade manuell durchführen.\n\n` +
-          `Deine Zugangsdaten wurden gespeichert. Sobald ein Key bereitsteht, wird das Upgrade durchgeführt.`,
-          getMainMenu()
-        );
+        return ctx.reply(t('key_delay_text', lang), getMainMenu(lang));
       }
       
       keyObj = freshKeys[0];
@@ -770,12 +854,7 @@ bot.on('text', async (ctx) => {
         })
         .eq('id', keyObj.id);
 
-      await ctx.reply(
-        `🔄 *Upgrade-Prozess läuft!* (Dauer: ca. 5–30 Minuten)\n\n` +
-        `Deine Zugangsdaten wurden verschlüsselt und an das System übertragen.\n` +
-        `Das Upgrade wird nun im Hintergrund ausgeführt. Wir überprüfen den Status fortlaufend und senden dir hier eine Benachrichtigung, sobald dein Premium-Upgrade aktiv ist! 🎧`,
-        getMainMenu()
-      );
+      await ctx.reply(t('upgrade_process_running', lang), getMainMenu(lang));
     } else {
       // Failed immediately!
       // Log to system logs
@@ -812,28 +891,21 @@ bot.on('text', async (ctx) => {
         .eq('id', sub.id);
 
       if (isCredentialError) {
-        await ctx.reply(
-          `❌ *Upgrade fehlgeschlagen!*\n\n` +
-          `Deine Spotify-Zugangsdaten (E-Mail oder Passwort) sind leider falsch.\n\n` +
-          `Bitte überprüfe dein Passwort und sende mir deine Daten erneut im Format \`E-Mail:Passwort\`.`
-        );
+        await ctx.reply(t('upgrade_failed_credentials', lang));
       } else if (isFamilyLimitError) {
-        await ctx.reply(
-          `❌ *Upgrade fehlgeschlagen!*\n\n` +
-          `Dein Spotify-Account war in den letzten 12 Monaten bereits Teil einer Premium Family.\n\n` +
-          `⚠️ *WICHTIG:* Wegen der Spotify-Sperre musst du einen **anderen (neuen) Spotify-Account** verwenden. Bitte erstelle einen neuen Account und sende mir die Zugangsdaten im Format \`E-Mail:Passwort\`.`
-        );
+        await ctx.reply(t('upgrade_failed_family_limit', lang));
       } else {
-        await ctx.reply(
-          `⚠️ *Upgrade-Verzögerung:*\n\n` +
-          `Es gab ein technisches Problem bei der Aktivierung: \`${upgradeRes.message}\`.\n\n` +
-          `Der Support-Admin wurde benachrichtigt. Du kannst dich auch direkt an @redo666redo wenden.`
-        );
+        await ctx.reply(t('upgrade_failed_technical', lang, { error: upgradeRes.message }));
       }
     }
   } catch (err) {
     console.error(err);
-    ctx.reply('❌ Systemfehler beim Verarbeiten des Upgrades.');
+    try {
+      const user = await getOrCreateUser(ctx);
+      ctx.reply(t('system_error', user.language || 'en'));
+    } catch (e) {
+      ctx.reply(t('system_error', 'en'));
+    }
   }
 });
 
