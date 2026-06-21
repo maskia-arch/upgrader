@@ -1,39 +1,63 @@
 const config = require('./config');
 
 /**
- * Fetch the current spot price of LTC in EUR from Coinbase.
+ * Fetch the current spot price of LTC in EUR from Coinbase with fallbacks.
  * @returns {Promise<number>} Exchange rate (EUR per LTC)
  */
 async function fetchLtcPrice() {
   if (config.useMockApi) {
-    // In mock mode, return a stable mock exchange rate
     return 75.50;
   }
   
+  // Try Coinbase
   try {
     const res = await fetch('https://api.coinbase.com/v2/prices/LTC-EUR/spot');
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
-    const data = await res.json();
-    if (data && data.data && data.data.amount) {
-      const rate = parseFloat(data.data.amount);
-      if (isNaN(rate) || rate <= 0) {
-        throw new Error(`Invalid price value: ${data.data.amount}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.data && data.data.amount) {
+        const rate = parseFloat(data.data.amount);
+        if (!isNaN(rate) && rate > 0) return rate;
       }
-      return rate;
     }
-    throw new Error('Unexpected API response structure');
   } catch (error) {
-    console.error('[BLOCKCHAIN ERROR] Failed to fetch LTC price:', error.message);
-    throw error;
+    console.warn('[BLOCKCHAIN WARNING] Failed to fetch LTC price from Coinbase:', error.message);
   }
+
+  // Fallback: Binance symbol ticker
+  try {
+    const res = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=LTCEUR');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.price) {
+        const rate = parseFloat(data.price);
+        if (!isNaN(rate) && rate > 0) return rate;
+      }
+    }
+  } catch (error) {
+    console.warn('[BLOCKCHAIN WARNING] Failed to fetch LTC price from Binance:', error.message);
+  }
+
+  // Fallback: Coingecko simple price
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=litecoin&vs_currencies=eur');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.litecoin && data.litecoin.eur) {
+        const rate = parseFloat(data.litecoin.eur);
+        if (!isNaN(rate) && rate > 0) return rate;
+      }
+    }
+  } catch (error) {
+    console.warn('[BLOCKCHAIN WARNING] Failed to fetch LTC price from Coingecko:', error.message);
+  }
+
+  throw new Error('Failed to fetch LTC price from all exchange price feeds.');
 }
 
 /**
  * Check transactions for a specific Litecoin address.
  * Matches incoming outputs against target amount in LTC (converted to satoshis/litoshis).
- * Returns transaction details if found.
+ * Employs automatic fallback across three free explorer APIs.
  * 
  * @param {string} address The LTC address to scan
  * @param {number} targetLtc Amount in LTC (e.g. 0.051234)
@@ -41,53 +65,109 @@ async function fetchLtcPrice() {
  */
 async function checkPayment(address, targetLtc) {
   if (config.useMockApi) {
-    // In mock mode, we look for a local mock database or return unconfirmed/confirmed based on simulation flags.
-    // By default, let's allow simulating via database state, or return no transaction.
     return { found: false, confirmed: false, txHash: null };
   }
 
+  const targetLitoshi = Math.round(targetLtc * 100000000);
+  console.log(`[BLOCKCHAIN] Checking payment for address ${address}, target: ${targetLtc} LTC (${targetLitoshi} litoshis)`);
+
+  // Explorer 1: litecoin.space (Esplora)
   try {
-    // Esplora endpoint returns the last 25-50 transactions
     const res = await fetch(`https://litecoin.space/api/address/${address}/txs`);
     if (res.status === 404) {
-      // 404 means no transactions have ever been sent to this address yet
       return { found: false, confirmed: false, txHash: null };
     }
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
-    const txs = await res.json();
-    if (!Array.isArray(txs)) {
-      return { found: false, confirmed: false, txHash: null };
-    }
-
-    // Convert target LTC to Litoshis (1 LTC = 100,000,000 litoshis)
-    const targetLitoshi = Math.round(targetLtc * 100000000);
-
-    for (const tx of txs) {
-      if (!tx.vout || !Array.isArray(tx.vout)) continue;
-
-      // Find an output to our target address with matching amount
-      const matchingOutput = tx.vout.find(output => 
-        output.scriptpubkey_address === address && 
-        output.value === targetLitoshi
-      );
-
-      if (matchingOutput) {
-        const isConfirmed = tx.status && tx.status.confirmed === true;
-        return {
-          found: true,
-          confirmed: isConfirmed,
-          txHash: tx.txid
-        };
+    if (res.ok) {
+      const txs = await res.json();
+      if (Array.isArray(txs)) {
+        for (const tx of txs) {
+          if (!tx.vout || !Array.isArray(tx.vout)) continue;
+          const matchingOutput = tx.vout.find(output => 
+            output.scriptpubkey_address === address && 
+            output.value === targetLitoshi
+          );
+          if (matchingOutput) {
+            return {
+              found: true,
+              confirmed: tx.status && tx.status.confirmed === true,
+              txHash: tx.txid
+            };
+          }
+        }
+        return { found: false, confirmed: false, txHash: null };
       }
+    } else {
+      console.warn(`[BLOCKCHAIN WARNING] litecoin.space returned status ${res.status}. Trying fallback explorer...`);
     }
-
-    return { found: false, confirmed: false, txHash: null };
-  } catch (error) {
-    console.error(`[BLOCKCHAIN ERROR] Failed checking address ${address}:`, error.message);
-    throw error;
+  } catch (err) {
+    console.warn(`[BLOCKCHAIN WARNING] litecoin.space fetch failed: ${err.message}. Trying fallback explorer...`);
   }
+
+  // Explorer 2: Chain.so (v2 API)
+  try {
+    const res = await fetch(`https://chain.so/api/v2/get_tx_received/LTC/${address}`);
+    if (res.ok) {
+      const body = await res.json();
+      if (body && body.status === 'success' && body.data && Array.isArray(body.data.txs)) {
+        for (const tx of body.data.txs) {
+          const valLitoshi = Math.round(parseFloat(tx.value) * 100000000);
+          if (valLitoshi === targetLitoshi) {
+            return {
+              found: true,
+              confirmed: tx.confirmations && tx.confirmations >= 1,
+              txHash: tx.txid
+            };
+          }
+        }
+        return { found: false, confirmed: false, txHash: null };
+      }
+    } else {
+      console.warn(`[BLOCKCHAIN WARNING] chain.so returned status ${res.status}. Trying second fallback...`);
+    }
+  } catch (err) {
+    console.warn(`[BLOCKCHAIN WARNING] chain.so fetch failed: ${err.message}. Trying second fallback...`);
+  }
+
+  // Explorer 3: BlockCypher (LTC API)
+  try {
+    const res = await fetch(`https://api.blockcypher.com/v1/ltc/main/addrs/${address}?limit=50`);
+    if (res.ok) {
+      const body = await res.json();
+      
+      // Parse confirmed txrefs
+      if (Array.isArray(body.txrefs)) {
+        for (const ref of body.txrefs) {
+          if (ref.tx_output_n >= 0 && ref.value === targetLitoshi) {
+            return {
+              found: true,
+              confirmed: ref.confirmations && ref.confirmations >= 1,
+              txHash: ref.tx_hash
+            };
+          }
+        }
+      }
+      // Parse unconfirmed txrefs (mempool)
+      if (Array.isArray(body.unconfirmed_txrefs)) {
+        for (const ref of body.unconfirmed_txrefs) {
+          if (ref.tx_output_n >= 0 && ref.value === targetLitoshi) {
+            return {
+              found: true,
+              confirmed: false,
+              txHash: ref.tx_hash
+            };
+          }
+        }
+      }
+      return { found: false, confirmed: false, txHash: null };
+    } else {
+      console.warn(`[BLOCKCHAIN WARNING] BlockCypher returned status ${res.status}.`);
+    }
+  } catch (err) {
+    console.warn(`[BLOCKCHAIN WARNING] BlockCypher fetch failed: ${err.message}.`);
+  }
+
+  // If all explorers failed, throw a consolidated error
+  throw new Error('All free Litecoin blockchain explorers failed or returned rate limits.');
 }
 
 module.exports = {

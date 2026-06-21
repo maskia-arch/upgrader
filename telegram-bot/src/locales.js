@@ -32,6 +32,7 @@ const locales = {
     status_active: 'Active',
     status_expired: 'Expired',
     status_failed: 'Failed',
+    status_cancelled: 'Cancelled',
     
     sub_info_format: '{statusIcon} *Package: {name}*\n• Status: *{status}*\n• Account: `{email}`\n',
     sub_info_expires: '• Expires: {date}\n',
@@ -59,6 +60,8 @@ const locales = {
       `*IMPORTANT:* Send exactly the requested amount. The invoice expires after the reservation window closes.`,
     invoice_check_btn: '🟢 Check payment now',
     invoice_cancel_btn: '🔴 Cancel payment',
+    invoice_qr_btn: '📱 QR Code',
+    invoice_qr_caption: '📱 *Payment QR Code*\n\n• Amount: `{amount}` LTC\n• Address: `{address}`\n\nScan this QR code with your Litecoin Wallet app to complete the payment.',
     invoice_internal_error: '❌ Internal system error while booking.',
     
     pay_check_no_tx: '❌ No matching transaction found yet. Please wait a moment and try again.',
@@ -67,7 +70,7 @@ const locales = {
     pay_check_confirmed_success: '✅ *Payment confirmed!* (TX: \`{txHash}...\`)\n\nYour package is ready. Please send me your Spotify login credentials in the format:\n`Email:Password`\n\ne.g.: \`alex@gmail.com:Password123\`',
     pay_check_expired: '❌ This invoice is expired or cancelled.',
     pay_check_error: '❌ Error during payment check.',
-    pay_cancel_success: '❌ Payment cancelled. The subscription has been marked as expired.',
+    pay_cancel_success: '❌ Payment cancelled. The subscription has been marked as cancelled.',
     pay_cancel_not_allowed: '⚠️ This invoice cannot be cancelled.',
     pay_cancel_error: '❌ Cancellation failed.',
     
@@ -80,6 +83,10 @@ const locales = {
     buy_reservation_error: '⚠️ Reservation error. Please try again.',
     buy_order_creation_error: '❌ Error creating order.',
     buy_invoice_creation_error: '❌ Error creating invoice.',
+    
+    checkout_blocked: '❌ *Checkout Blocked!*\n\nYou have created too many checkouts recently (limit: 5 checkouts within 60 minutes). You are blocked from creating new checkouts for 6 hours.\n\nTry again after: *{time}*',
+    checkout_waiting_admin: '❌ *Checkout Blocked!*\n\nYou have been locked out multiple times due to rate limits. Your account is currently suspended pending administrator review.',
+    checkout_banned: '❌ *Access Denied!*\n\nYour account has been permanently excluded from creating checkouts.',
     
     replace_ask_text: `⚠️ *Request replacement for this subscription?*\n\n` +
       `Only use this option if you were kicked out of the family plan early or your Premium stopped working.\n\n` +
@@ -190,6 +197,7 @@ const locales = {
     status_active: 'Aktiv',
     status_expired: 'Abgelaufen',
     status_failed: 'Fehlgeschlagen',
+    status_cancelled: 'Storniert',
     
     sub_info_format: '{statusIcon} *Paket: {name}*\n• Status: *{status}*\n• Account: `{email}`\n',
     sub_info_expires: '• Läuft ab: {date}\n',
@@ -217,6 +225,8 @@ const locales = {
       `*WICHTIG:* Sende genau den geforderten Betrag. Nach Ablauf der Reservierung verfällt die Rechnung.`,
     invoice_check_btn: '🟢 Zahlung jetzt prüfen',
     invoice_cancel_btn: '🔴 Zahlung stornieren',
+    invoice_qr_btn: '📱 QR-Code',
+    invoice_qr_caption: '📱 *Zahlungs-QR-Code*\n\n• Betrag: `{amount}` LTC\n• Adresse: `{address}`\n\nScanne diesen QR-Code mit deiner Litecoin-Wallet-App, um die Zahlung durchzuführen.',
     invoice_internal_error: '❌ Interner Systemfehler beim Buchen.',
     
     pay_check_no_tx: '❌ Noch kein passender Zahlungseingang gefunden. Bitte warte einen Moment und versuche es erneut.',
@@ -225,7 +235,7 @@ const locales = {
     pay_check_confirmed_success: '✅ *Zahlung bestätigt!* (TX: \`{txHash}...\`)\n\nDein Paket ist nun bereit. Bitte sende mir jetzt deine Spotify-Zugangsdaten im Format:\n`E-Mail:Passwort`\n\nz.B.: \`alex@gmail.com:Passwort123\`',
     pay_check_expired: '❌ Diese Rechnung ist abgelaufen oder storniert.',
     pay_check_error: '❌ Fehler bei der Zahlungsprüfung.',
-    pay_cancel_success: '❌ Zahlung storniert. Das Abonnement wurde als abgelaufen markiert.',
+    pay_cancel_success: '❌ Zahlung storniert. Das Abonnement wurde als storniert markiert.',
     pay_cancel_not_allowed: '⚠️ Diese Rechnung kann nicht storniert werden.',
     pay_cancel_error: '❌ Stornierung fehlgeschlagen.',
     
@@ -238,6 +248,10 @@ const locales = {
     buy_reservation_error: '⚠️ Reservierungsfehler. Bitte versuche es erneut.',
     buy_order_creation_error: '❌ Fehler beim Erstellen der Bestellung.',
     buy_invoice_creation_error: '❌ Fehler beim Erstellen der Rechnung.',
+    
+    checkout_blocked: '❌ *Checkout gesperrt!*\n\nDu hast in letzter Zeit zu viele Checkouts erstellt (Limit: 5 Checkouts innerhalb von 60 Minuten). Du bist für 6 Stunden für neue Checkout-Erstellungen gesperrt.\n\nVersuche es wieder nach: *{time}*',
+    checkout_waiting_admin: '❌ *Checkout gesperrt!*\n\nDu wurdest mehrfach wegen API-Limits gesperrt. Dein Konto ist derzeit gesperrt und wartet auf eine Überprüfung durch den Administrator.',
+    checkout_banned: '❌ *Zugriff verweigert!*\n\nDein Konto wurde dauerhaft von der Checkout-Erstellung ausgeschlossen.',
     
     replace_ask_text: `⚠️ *Ersatz für dieses Abonnement anfragen?*\n\n` +
       `Nutze diese Option nur, wenn du vorzeitig aus der Family geworfen wurdest oder dein Premium nicht mehr funktioniert.\n\n` +
@@ -346,6 +360,7 @@ const locales = {
     status_active: 'Активно',
     status_expired: 'Истекло',
     status_failed: 'Ошибка',
+    status_cancelled: 'Отменено',
     
     sub_info_format: '{statusIcon} *Пакет: {name}*\n• Статус: *{status}*\n• Аккаунт: `{email}`\n',
     sub_info_expires: '• Истекает: {date}\n',
@@ -373,6 +388,8 @@ const locales = {
       `*ВАЖНО:* Отправляйте именно указанную сумму. Инвойс истечет после окончания окна резервирования.`,
     invoice_check_btn: '🟢 Проверить оплату',
     invoice_cancel_btn: '🔴 Отменить оплату',
+    invoice_qr_btn: '📱 QR-код',
+    invoice_qr_caption: '📱 *QR-код для оплаты*\n\n• Сумма: `{amount}` LTC\n• Адрес: `{address}`\n\nОтсканируйте этот QR-код с помощью приложения кошелька Litecoin для оплаты.',
     invoice_internal_error: '❌ Внутренняя системная ошибка при бронировании.',
     
     pay_check_no_tx: '❌ Соответствующая транзакция пока не найдена. Пожалуйста, подождите немного и попробуйте еще раз.',
@@ -381,7 +398,7 @@ const locales = {
     pay_check_confirmed_success: '✅ *Оплата подтверждена!* (TX: \`{txHash}...\`)\n\nВаш пакет готов. Пожалуйста, отправьте мне учетные данные вашего аккаунта Spotify в формате:\n`Email:Пароль`\n\nнапример: \`alex@gmail.com:Password123\`',
     pay_check_expired: '❌ Этот счет истек или был отменен.',
     pay_check_error: '❌ Ошибка при проверке платежа.',
-    pay_cancel_success: '❌ Оплата отменена. Подписка помечена как истекшая.',
+    pay_cancel_success: '❌ Оплата отменена. Подписка помечена как отмененная.',
     pay_cancel_not_allowed: '⚠️ Этот счет не может быть отменен.',
     pay_cancel_error: '❌ Отмена не удалась.',
     
@@ -394,6 +411,10 @@ const locales = {
     buy_reservation_error: '⚠️ Ошибка резервирования. Пожалуйста, попробуйте еще раз.',
     buy_order_creation_error: '❌ Ошибка при создании заказа.',
     buy_invoice_creation_error: '❌ Ошибка при создании счета.',
+    
+    checkout_blocked: '❌ *Создание заказа заблокировано!*\n\nВы создали слишком много заказов за последнее время (лимит: 5 заказов за 60 минут). Создание новых заказов заблокировано на 6 часов.\n\nПопробуйте снова после: *{time}*',
+    checkout_waiting_admin: '❌ *Создание заказа заблокировано!*\n\nВы были заблокированы несколько раз из-за ограничений частоты. Ваш аккаунт временно заблокирован до решения администратора.',
+    checkout_banned: '❌ *Доступ запрещен!*\n\nВаш аккаунт был навсегда исключен из возможности создания заказов.',
     
     replace_ask_text: `⚠️ *Запросить замену для этой подписки?*\n\n` +
       `Используйте эту опцию только в том случае, если вас досрочно удалили из семейного плана или ваш Premium перестал работать.\n\n` +

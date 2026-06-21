@@ -154,6 +154,7 @@ async function handleShowSubscriptions(ctx) {
       .from('subscriptions')
       .select('*, packages(name, duration_months)')
       .eq('user_id', user.id)
+      .neq('status', 'cancelled')
       .order('created_at', { ascending: false });
 
     if (error || !subs || subs.length === 0) {
@@ -312,6 +313,71 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
     const user = await getOrCreateUser(ctx);
     const lang = user.language || 'en';
 
+    // 1. Check if user is banned
+    if (user.is_banned) {
+      return ctx.reply(t('checkout_banned', lang));
+    }
+
+    // 2. Check if user requires admin decision
+    if (user.requires_admin_decision) {
+      return ctx.reply(t('checkout_waiting_admin', lang));
+    }
+
+    // 3. Check if user is currently blocked
+    if (user.checkout_blocked_until && new Date(user.checkout_blocked_until) > new Date()) {
+      const blockUntil = new Date(user.checkout_blocked_until);
+      const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+      const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
+      const timeStr = blockUntil.toLocaleTimeString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', timeOptions);
+      const dateStr = blockUntil.toLocaleDateString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', dateOptions);
+      return ctx.reply(t('checkout_blocked', lang, { time: `${dateStr} ${timeStr}` }));
+    }
+
+    // 4. Count checkouts in last 60 minutes
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count: checkoutCount, error: countErr } = await supabase
+      .from('subscriptions')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gt('created_at', oneHourAgo);
+
+    if (countErr) {
+      console.error('[SPAM CHECK ERROR] Failed to count checkouts:', countErr.message);
+    } else if (checkoutCount >= 4) {
+      // Trigger lockout!
+      const blockedUntil = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6 hours
+      const newLockoutCount = (user.lockout_count || 0) + 1;
+      const requiresDecision = newLockoutCount >= 3;
+
+      await supabase
+        .from('users')
+        .update({
+          checkout_blocked_until: blockedUntil.toISOString(),
+          lockout_count: newLockoutCount,
+          requires_admin_decision: requiresDecision
+        })
+        .eq('id', user.id);
+
+      // Log spam event
+      await supabase.from('system_logs').insert({
+        level: requiresDecision ? 'ERROR' : 'INFO',
+        component: 'BOT',
+        message: `User ${user.telegram_id} locked out from checkout (Spam protection). Lockout count: ${newLockoutCount}`,
+        details: { user_id: user.id, lockout_count: newLockoutCount, requires_decision: requiresDecision }
+      });
+
+      const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+      const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
+      const timeStr = blockedUntil.toLocaleTimeString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', timeOptions);
+      const dateStr = blockedUntil.toLocaleDateString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', dateOptions);
+      
+      if (requiresDecision) {
+        return ctx.reply(t('checkout_waiting_admin', lang));
+      } else {
+        return ctx.reply(t('checkout_blocked', lang, { time: `${dateStr} ${timeStr}` }));
+      }
+    }
+
     // Fetch package details
     const { data: pkg, error: pkgError } = await supabase
       .from('packages')
@@ -455,6 +521,7 @@ async function sendPaymentInvoice(ctx, subId, invoice, address, packageName) {
   });
 
   const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback(t('invoice_qr_btn', lang), `show_qr_${invoice.id}`)],
     [Markup.button.callback(t('invoice_check_btn', lang), `check_pay_${invoice.id}`)],
     [Markup.button.callback(t('invoice_cancel_btn', lang), `cancel_pay_${invoice.id}`)]
   ]);
@@ -497,6 +564,52 @@ bot.action(/^pay_details_(.+)$/, async (ctx) => {
   }
 });
 
+// Action: Show QR Code
+bot.action(/^show_qr_(.+)$/, async (ctx) => {
+  const invoiceId = ctx.match[1];
+  try {
+    await ctx.answerCbQuery();
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+
+    // Fetch latest invoice details
+    const { data: invoice, error: invError } = await supabase
+      .from('invoices')
+      .select('*, ltc_addresses(ltc_address)')
+      .eq('id', invoiceId)
+      .single();
+
+    if (invError || !invoice) {
+      return ctx.reply(t('pay_details_error', lang));
+    }
+
+    const address = invoice.ltc_addresses?.ltc_address;
+    const amount = invoice.amount_ltc.toFixed(8);
+
+    // Create Litecoin payment URI (BIP 21 standard)
+    const paymentUri = `litecoin:${address}?amount=${amount}`;
+    
+    // Generate QR code URL using public qrserver API
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(paymentUri)}`;
+
+    // Reply with photo
+    await ctx.replyWithPhoto(
+      { url: qrUrl },
+      {
+        caption: t('invoice_qr_caption', lang, {
+          amount: amount,
+          address: address
+        }),
+        parse_mode: 'Markdown'
+      }
+    );
+  } catch (err) {
+    console.error('[BOT ERROR] Show QR code error:', err);
+    const user = await getOrCreateUser(ctx);
+    ctx.reply(t('pay_details_error', user.language || 'en'));
+  }
+});
+
 // Action: Cancel Payment
 bot.action(/^cancel_pay_(.+)$/, async (ctx) => {
   const invoiceId = ctx.match[1];
@@ -528,7 +641,7 @@ bot.action(/^cancel_pay_(.+)$/, async (ctx) => {
 
     await supabase
       .from('subscriptions')
-      .update({ status: 'expired' })
+      .update({ status: 'cancelled' })
       .eq('id', invoice.sub_id);
 
     await ctx.reply(t('pay_cancel_success', lang), getMainMenu(lang));

@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS users (
     language TEXT NOT NULL DEFAULT 'en' CHECK (language IN ('en', 'de', 'ru')),
     last_delivery_failed_at TIMESTAMPTZ,
     check_prompt_sent_at TIMESTAMPTZ,
+    checkout_blocked_until TIMESTAMPTZ,
+    lockout_count INTEGER NOT NULL DEFAULT 0,
+    is_banned BOOLEAN NOT NULL DEFAULT FALSE,
+    requires_admin_decision BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -58,7 +62,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     key_id UUID REFERENCES upgrader_keys(id) ON DELETE SET NULL,
     spotify_email TEXT,
     spotify_password_encrypted TEXT,
-    status TEXT NOT NULL DEFAULT 'pending_payment' CHECK (status IN ('pending_payment', 'activating', 'active', 'expired', 'renewing', 'failed')),
+    status TEXT NOT NULL DEFAULT 'pending_payment' CHECK (status IN ('pending_payment', 'activating', 'active', 'expired', 'renewing', 'failed', 'cancelled')),
     expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

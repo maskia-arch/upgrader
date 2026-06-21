@@ -41,6 +41,9 @@ async function watchPayments() {
     const now = new Date();
 
     for (const inv of invoices) {
+      // Delay check to stay within API limits of free block explorers
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
       const telegramId = inv.subscriptions?.users?.telegram_id;
       const language = inv.subscriptions?.users?.language || 'en';
       const address = inv.ltc_addresses?.ltc_address;
@@ -52,8 +55,8 @@ async function watchPayments() {
         await supabase.from('invoices').update({ status: 'expired' }).eq('id', inv.id);
         // Release address
         await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', inv.ltc_address_id);
-        // Set subscription status
-        await supabase.from('subscriptions').update({ status: 'expired' }).eq('id', inv.sub_id);
+        // Set subscription status to cancelled
+        await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', inv.sub_id);
         
         if (telegramId) {
           await notifyUser(telegramId, t('notify_invoice_expired', language));
