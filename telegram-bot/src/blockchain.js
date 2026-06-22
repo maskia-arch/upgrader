@@ -61,11 +61,11 @@ async function fetchLtcPrice() {
  * 
  * @param {string} address The LTC address to scan
  * @param {number} targetLtc Amount in LTC (e.g. 0.051234)
- * @returns {Promise<{ found: boolean, confirmed: boolean, txHash: string|null }>} Payment status
+ * @returns {Promise<{ found: boolean, confirmed: boolean, txHash: string|null, paidAmount: number }>} Payment status
  */
 async function checkPayment(address, targetLtc) {
   if (config.useMockApi) {
-    return { found: false, confirmed: false, txHash: null };
+    return { found: false, confirmed: false, txHash: null, paidAmount: 0 };
   }
 
   const targetLitoshi = Math.round(targetLtc * 100000000);
@@ -75,27 +75,35 @@ async function checkPayment(address, targetLtc) {
   try {
     const res = await fetch(`https://litecoin.space/api/address/${address}/txs`);
     if (res.status === 404) {
-      return { found: false, confirmed: false, txHash: null };
+      return { found: false, confirmed: false, txHash: null, paidAmount: 0 };
     }
     if (res.ok) {
       const txs = await res.json();
+      let totalLitoshi = 0;
+      let hasUnconfirmed = false;
+      let txHashes = [];
       if (Array.isArray(txs)) {
         for (const tx of txs) {
           if (!tx.vout || !Array.isArray(tx.vout)) continue;
-          const matchingOutput = tx.vout.find(output => 
-            output.scriptpubkey_address === address && 
-            output.value === targetLitoshi
-          );
-          if (matchingOutput) {
-            return {
-              found: true,
-              confirmed: tx.status && tx.status.confirmed === true,
-              txHash: tx.txid
-            };
+          const matchingOutputs = tx.vout.filter(output => output.scriptpubkey_address === address);
+          if (matchingOutputs.length > 0) {
+            txHashes.push(tx.txid);
+            for (const out of matchingOutputs) {
+              totalLitoshi += out.value;
+            }
+            if (!tx.status || tx.status.confirmed !== true) {
+              hasUnconfirmed = true;
+            }
           }
         }
-        return { found: false, confirmed: false, txHash: null };
       }
+      const paidAmount = totalLitoshi / 100000000;
+      return {
+        found: paidAmount > 0,
+        confirmed: paidAmount > 0 && !hasUnconfirmed,
+        txHash: txHashes[0] || null,
+        paidAmount: paidAmount
+      };
     } else {
       console.warn(`[BLOCKCHAIN WARNING] litecoin.space returned status ${res.status}. Trying fallback explorer...`);
     }
@@ -108,19 +116,26 @@ async function checkPayment(address, targetLtc) {
     const res = await fetch(`https://chain.so/api/v2/get_tx_received/LTC/${address}`);
     if (res.ok) {
       const body = await res.json();
+      let totalLitoshi = 0;
+      let hasUnconfirmed = false;
+      let txHashes = [];
       if (body && body.status === 'success' && body.data && Array.isArray(body.data.txs)) {
         for (const tx of body.data.txs) {
           const valLitoshi = Math.round(parseFloat(tx.value) * 100000000);
-          if (valLitoshi === targetLitoshi) {
-            return {
-              found: true,
-              confirmed: tx.confirmations && tx.confirmations >= 1,
-              txHash: tx.txid
-            };
+          totalLitoshi += valLitoshi;
+          txHashes.push(tx.txid);
+          if (!tx.confirmations || tx.confirmations < 1) {
+            hasUnconfirmed = true;
           }
         }
-        return { found: false, confirmed: false, txHash: null };
       }
+      const paidAmount = totalLitoshi / 100000000;
+      return {
+        found: paidAmount > 0,
+        confirmed: paidAmount > 0 && !hasUnconfirmed,
+        txHash: txHashes[0] || null,
+        paidAmount: paidAmount
+      };
     } else {
       console.warn(`[BLOCKCHAIN WARNING] chain.so returned status ${res.status}. Trying second fallback...`);
     }
@@ -133,32 +148,36 @@ async function checkPayment(address, targetLtc) {
     const res = await fetch(`https://api.blockcypher.com/v1/ltc/main/addrs/${address}?limit=50`);
     if (res.ok) {
       const body = await res.json();
-      
-      // Parse confirmed txrefs
+      let totalLitoshi = 0;
+      let hasUnconfirmed = false;
+      let txHashes = [];
       if (Array.isArray(body.txrefs)) {
         for (const ref of body.txrefs) {
-          if (ref.tx_output_n >= 0 && ref.value === targetLitoshi) {
-            return {
-              found: true,
-              confirmed: ref.confirmations && ref.confirmations >= 1,
-              txHash: ref.tx_hash
-            };
+          if (ref.tx_output_n >= 0) {
+            totalLitoshi += ref.value;
+            txHashes.push(ref.tx_hash);
+            if (!ref.confirmations || ref.confirmations < 1) {
+              hasUnconfirmed = true;
+            }
           }
         }
       }
-      // Parse unconfirmed txrefs (mempool)
       if (Array.isArray(body.unconfirmed_txrefs)) {
         for (const ref of body.unconfirmed_txrefs) {
-          if (ref.tx_output_n >= 0 && ref.value === targetLitoshi) {
-            return {
-              found: true,
-              confirmed: false,
-              txHash: ref.tx_hash
-            };
+          if (ref.tx_output_n >= 0) {
+            totalLitoshi += ref.value;
+            txHashes.push(ref.tx_hash);
+            hasUnconfirmed = true;
           }
         }
       }
-      return { found: false, confirmed: false, txHash: null };
+      const paidAmount = totalLitoshi / 100000000;
+      return {
+        found: paidAmount > 0,
+        confirmed: paidAmount > 0 && !hasUnconfirmed,
+        txHash: txHashes[0] || null,
+        paidAmount: paidAmount
+      };
     } else {
       console.warn(`[BLOCKCHAIN WARNING] BlockCypher returned status ${res.status}.`);
     }
