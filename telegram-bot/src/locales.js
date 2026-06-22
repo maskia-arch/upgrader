@@ -88,6 +88,15 @@ const locales = {
     checkout_waiting_admin: '❌ *Checkout Blocked!*\n\nYou have been locked out multiple times due to rate limits. Your account is currently suspended pending administrator review.',
     checkout_banned: '❌ *Access Denied!*\n\nYour account has been permanently excluded from creating checkouts.',
     
+    coupon_ask: '🎟️ *Do you have a discount coupon code?*\n\nIf you have a coupon code, click the button below to apply it. Otherwise, you can skip this step.',
+    coupon_enter_btn: '🎟️ Enter Coupon Code',
+    coupon_skip_btn: '➡️ Skip / Pay Full Price',
+    coupon_prompt: '✍️ Please send your coupon code as a text message now.',
+    coupon_invalid: '❌ *Invalid or Expired Coupon!*\n\nThe code you entered does not exist, has expired, or reached its maximum usage limit.\n\nPlease check the code and try again, or skip.',
+    coupon_retry_btn: '🎟️ Try Another Code',
+    coupon_applied_success: '✅ *Coupon applied successfully!*\n• Discount: *{discount}*\n\nPlease wait while we generate your invoice...',
+    coupon_free_confirmed: '🎁 *Upgrade covered 100% by coupon!*\n\nYour discount covers the entire package price. Your upgrade status has been updated to active.\n\nPlease send me your Spotify login credentials in the format:\n`Email:Password`\n\ne.g.: \`alex@gmail.com:Password123\`',
+    
     replace_ask_text: `⚠️ *Request replacement for this subscription?*\n\n` +
       `Only use this option if you were kicked out of the family plan early or your Premium stopped working.\n\n` +
       `*⚠️ IMPORTANT NOTICE:* Falsely requesting a replacement (e.g. if Premium is still active on your account) will result in a system-side Flag (Warning). At 3 Flags, you will be blocked from future replacement requests for this key!\n\n` +
@@ -253,6 +262,15 @@ const locales = {
     checkout_waiting_admin: '❌ *Checkout gesperrt!*\n\nDu wurdest mehrfach wegen API-Limits gesperrt. Dein Konto ist derzeit gesperrt und wartet auf eine Überprüfung durch den Administrator.',
     checkout_banned: '❌ *Zugriff verweigert!*\n\nDein Konto wurde dauerhaft von der Checkout-Erstellung ausgeschlossen.',
     
+    coupon_ask: '🎟️ *Hast du einen Rabatt-Coupon?*\n\nWenn du einen Coupon-Code besitzt, klicke auf den Button unten, um ihn anzuwenden. Andernfalls kannst du diesen Schritt überspringen.',
+    coupon_enter_btn: '🎟️ Coupon eingeben',
+    coupon_skip_btn: '➡️ Überspringen',
+    coupon_prompt: '✍️ Bitte sende mir deinen Coupon-Code jetzt als Textnachricht.',
+    coupon_invalid: '❌ *Ungültiger oder abgelaufener Coupon!*\n\nDer eingegebene Code existiert nicht, ist abgelaufen oder hat das Nutzungslimit erreicht.\n\nBitte überprüfe den Code und versuche es erneut, oder überspringe diesen Schritt.',
+    coupon_retry_btn: '🎟️ Coupon erneut eingeben',
+    coupon_applied_success: '✅ *Coupon erfolgreich angewendet!*\n• Rabatt: *{discount}*\n\nBitte warte einen Moment, während wir deine Rechnung erstellen...',
+    coupon_free_confirmed: '🎁 *Upgrade zu 100% durch Coupon gedeckt!*\n\nDein Rabatt deckt den gesamten Paketpreis. Dein Upgrade wurde sofort aktiviert.\n\nBitte sende mir jetzt deine Spotify-Zugangsdaten im Format:\n`E-Mail:Passwort`\n\nz.B.: \`alex@gmail.com:Passwort123\`',
+    
     replace_ask_text: `⚠️ *Ersatz für dieses Abonnement anfragen?*\n\n` +
       `Nutze diese Option nur, wenn du vorzeitig aus der Family geworfen wurdest oder dein Premium nicht mehr funktioniert.\n\n` +
       `*⚠️ WICHTIGER HINWEIS:* Das fälschliche Anfordern von Ersatz (z.B. wenn Premium auf deinem Account noch aktiv ist) wird systemseitig mit einem Flag (Verwarnung) belegt. Bei 3 Flags wirst du für jegliche zukünftige Ersatzanfragen dieses Keys gesperrt!\n\n` +
@@ -415,6 +433,15 @@ const locales = {
     checkout_blocked: '❌ *Создание заказа заблокировано!*\n\nВы создали слишком много заказов за последнее время (лимит: 5 заказов за 60 минут). Создание новых заказов заблокировано на 6 часов.\n\nПопробуйте снова после: *{time}*',
     checkout_waiting_admin: '❌ *Создание заказа заблокировано!*\n\nВы были заблокированы несколько раз из-за ограничений частоты. Ваш аккаунт временно заблокирован до решения администратора.',
     checkout_banned: '❌ *Доступ запрещен!*\n\nВаш аккаунт был навсегда исключен из возможности создания заказов.',
+    
+    coupon_ask: '🎟️ *У вас есть промокод на скидку?*\n\nЕсли у вас есть промокод, нажмите кнопку ниже, чтобы применить его. В противном случае вы можете пропустить этот шаг.',
+    coupon_enter_btn: '🎟️ Ввести промокод',
+    coupon_skip_btn: '➡️ Пропустить',
+    coupon_prompt: '✍️ Пожалуйста, отправьте ваш промокод в текстовом сообщении прямо сейчас.',
+    coupon_invalid: '❌ *Недействительный или испекший промокод!*\n\nВведенный код не существует, истек или достиг лимита использования.\n\nПожалуйста, проверьте код и попробуйте снова, или пропустите.',
+    coupon_retry_btn: '🎟️ Ввести другой промокод',
+    coupon_applied_success: '✅ *Промокод успешно применен!*\n• Скидка: *{discount}*\n\nПожалуйста, подождите, пока мы создаем ваш счет...',
+    coupon_free_confirmed: '🎁 *Активация на 100% покрыта промокодом!*\n\nВаша скидка покрывает полную стоимость пакета. Ваша активация уже подготовлена.\n\nПожалуйста, отправьте мне учетные данные вашего аккаунта Spotify в формате:\n`Email:Пароль`\n\nнапример: \`alex@gmail.com:Password123\`',
     
     replace_ask_text: `⚠️ *Запросить замену для этой подписки?*\n\n` +
       `Используйте эту опцию только в том случае, если вас досрочно удалили из семейного плана или ваш Premium перестал работать.\n\n` +

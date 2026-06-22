@@ -1,17 +1,23 @@
 const config = require('./config');
 
 /**
+ * Helper to normalize upgrader.cc endpoint URLs.
+ * Handles cases where UPGRADER_API_URL has /api appended or trailing slashes,
+ * and always points to the correct /api/path.
+ */
+function getApiEndpoint(path) {
+  let baseUrl = config.upgraderApiUrl || 'https://upgrader.cc';
+  // Remove /api or /api/ if it exists at the end, and strip trailing slash
+  baseUrl = baseUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
+  return `${baseUrl}/api/${path.replace(/^\//, '')}`;
+}
+
+/**
  * Perform Spotify account upgrade at upgrader.cc.
- * 
- * @param {string} key The product/upgrade key
- * @param {string} email Spotify account email
- * @param {string} password Spotify account password
- * @returns {Promise<{ success: boolean, message: string, spotifyAccountId?: string }>} Result details
  */
 async function upgradeAccount(key, email, password) {
   if (config.useMockApi) {
     console.log(`[MOCK API] Upgrading account: Key=${key}, Email=${email}`);
-    // Simulate error cases for testing
     if (password.toLowerCase().startsWith('fail')) {
       return {
         success: false,
@@ -32,7 +38,7 @@ async function upgradeAccount(key, email, password) {
   }
 
   try {
-    const res = await fetch(`${config.upgraderApiUrl}/api/upgrade`, {
+    const res = await fetch(getApiEndpoint('upgrade'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -41,13 +47,12 @@ async function upgradeAccount(key, email, password) {
       body: JSON.stringify({
         key,
         login: email,
-        password
+        password,
+        country: 'ANY'
       })
     });
 
     const data = await res.json();
-    
-    // Upgrader.cc standard response fields: success (boolean), message (string)
     if (res.ok && data && (data.success || data.status === 'success')) {
       return {
         success: true,
@@ -71,12 +76,6 @@ async function upgradeAccount(key, email, password) {
 
 /**
  * Trigger renewal/release process for an account at upgrader.cc.
- * This dissociates the account and prepares the key to be used again.
- * 
- * @param {string} key The product/upgrade key
- * @param {string} email Spotify account email
- * @param {string} password Spotify account password (if available)
- * @returns {Promise<{ success: boolean, message: string }>} Result details
  */
 async function renewAccount(key, email, password = '') {
   if (config.useMockApi) {
@@ -94,7 +93,7 @@ async function renewAccount(key, email, password = '') {
   }
 
   try {
-    const res = await fetch(`${config.upgraderApiUrl}/api/renew`, {
+    const res = await fetch(getApiEndpoint('renew'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -130,14 +129,10 @@ async function renewAccount(key, email, password = '') {
 
 /**
  * Retrieve key status details from upgrader.cc.
- * 
- * @param {string} key The product/upgrade key
- * @returns {Promise<{ status: string, message?: string }>} Status details (e.g. status: 'usable')
  */
 async function getKeyInfo(key) {
   if (config.useMockApi) {
     console.log(`[MOCK API] Checking key status: ${key}`);
-    // Check if it is marked as error or expired in local simulation
     if (key.includes('error')) {
       return { status: 'error', message: 'Simulated key error' };
     }
@@ -151,12 +146,13 @@ async function getKeyInfo(key) {
   }
 
   try {
-    // Info endpoint is GET /API/?info={key}
-    const res = await fetch(`${config.upgraderApiUrl}/API/?info=${key}`, {
-      method: 'GET',
+    const res = await fetch(getApiEndpoint('info'), {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'X-API-Key': config.upgraderApiKey
-      }
+      },
+      body: JSON.stringify({ key })
     });
 
     if (!res.ok) {
@@ -164,9 +160,26 @@ async function getKeyInfo(key) {
     }
 
     const data = await res.json();
-    // Typical keys: {"status": "usable"} or {"status": "active"} or similar
+    
+    // Robustly map upgrader.cc statuses to system constraints: ['usable', 'active', 'expired', 'error']
+    let status = 'error';
+    const msg = (data.message || '').toLowerCase();
+    const apiStatus = (data.status || '').toLowerCase();
+    
+    if (data.used === 0 || data.used === '0' || msg.includes('usable')) {
+      status = 'usable';
+    } else if (data.used === 1 || data.used === '1') {
+      if (apiStatus === 'expired' || msg.includes('expired')) {
+        status = 'expired';
+      } else {
+        status = 'active';
+      }
+    } else if (apiStatus === 'not_exist' || apiStatus === 'error') {
+      status = 'error';
+    }
+
     return {
-      status: data.status || 'unknown',
+      status,
       message: data.message || null
     };
   } catch (error) {

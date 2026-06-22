@@ -3,6 +3,7 @@ const { decrypt } = require('./crypto');
 const { checkPayment } = require('./blockchain');
 const { renewAccount, getKeyInfo } = require('./upgrader');
 const { t } = require('./locales');
+const { incrementCouponUses } = require('./coupons');
 
 // Initialize with bot instance for sending messages
 let telegramBot = null;
@@ -32,7 +33,7 @@ async function watchPayments() {
   try {
     const { data: invoices, error } = await supabase
       .from('invoices')
-      .select('*, ltc_addresses(ltc_address), subscriptions(user_id, users(telegram_id, language))')
+      .select('*, ltc_addresses(ltc_address), subscriptions(user_id, coupon_id, users(telegram_id, language))')
       .in('status', ['unpaid', 'detected']);
 
     if (error) throw error;
@@ -76,6 +77,10 @@ async function watchPayments() {
             await supabase.from('invoices').update({ status: 'confirmed', tx_hash: check.txHash }).eq('id', inv.id);
             await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', inv.ltc_address_id);
             await supabase.from('subscriptions').update({ status: 'activating', updated_at: new Date().toISOString() }).eq('id', inv.sub_id);
+
+            if (inv.subscriptions && inv.subscriptions.coupon_id) {
+              await incrementCouponUses(inv.subscriptions.coupon_id);
+            }
 
             if (telegramId) {
               await notifyUser(telegramId, 

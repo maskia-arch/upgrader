@@ -54,15 +54,28 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 4.5. Coupons
+CREATE TABLE IF NOT EXISTS coupons (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    code TEXT UNIQUE NOT NULL,
+    discount_type TEXT NOT NULL CHECK (discount_type IN ('percentage', 'fixed')),
+    discount_value NUMERIC(10, 2) NOT NULL CHECK (discount_value > 0),
+    expires_at TIMESTAMPTZ,
+    max_uses INTEGER CHECK (max_uses IS NULL OR max_uses > 0),
+    use_count INTEGER NOT NULL DEFAULT 0 CHECK (use_count >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- 5. Subscriptions
 CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     package_id UUID NOT NULL REFERENCES packages(id),
     key_id UUID REFERENCES upgrader_keys(id) ON DELETE SET NULL,
+    coupon_id UUID REFERENCES coupons(id) ON DELETE SET NULL,
     spotify_email TEXT,
     spotify_password_encrypted TEXT,
-    status TEXT NOT NULL DEFAULT 'pending_payment' CHECK (status IN ('pending_payment', 'activating', 'active', 'expired', 'renewing', 'failed', 'cancelled')),
+    status TEXT NOT NULL DEFAULT 'pending_payment' CHECK (status IN ('waiting_coupon', 'pending_payment', 'activating', 'active', 'expired', 'renewing', 'failed', 'cancelled')),
     expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
