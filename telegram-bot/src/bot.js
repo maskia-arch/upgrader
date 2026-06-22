@@ -111,6 +111,24 @@ async function handleShowPackages(ctx) {
     const user = await getOrCreateUser(ctx);
     const lang = user.language || 'en';
     
+    // Check if upgrades are active (we have > 0 usable keys)
+    const { count: usableCount, error: countErr } = await supabase
+      .from('upgrader_keys')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'usable');
+
+    if (countErr) throw countErr;
+
+    if (!usableCount || usableCount === 0) {
+      // 0 keys usable: show out of stock warning with "Ping me" inline button
+      return ctx.reply(t('out_of_stock', lang), {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback(t('ping_btn', lang), 'ping_subscribe')]
+        ])
+      });
+    }
+
     // Fetch packages
     const { data: packages, error } = await supabase
       .from('packages')
@@ -259,7 +277,7 @@ async function handleShowLanguage(ctx) {
 }
 
 // Command and hears handlers mapping
-bot.command(['paket', 'packages'], handleShowPackages);
+bot.command(['paket', 'packages', 'buy'], handleShowPackages);
 bot.command(['abos', 'subscriptions'], handleShowSubscriptions);
 bot.command('faq', handleShowFAQ);
 bot.command(['language', 'sprache', 'lang'], handleShowLanguage);
@@ -314,70 +332,9 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
     const user = await getOrCreateUser(ctx);
     const lang = user.language || 'en';
 
-    // 1. Check if user is banned
-    if (user.is_banned) {
-      return ctx.reply(t('checkout_banned', lang));
-    }
-
-    // 2. Check if user requires admin decision
-    if (user.requires_admin_decision) {
-      return ctx.reply(t('checkout_waiting_admin', lang));
-    }
-
-    // 3. Check if user is currently blocked
-    if (user.checkout_blocked_until && new Date(user.checkout_blocked_until) > new Date()) {
-      const blockUntil = new Date(user.checkout_blocked_until);
-      const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
-      const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
-      const timeStr = blockUntil.toLocaleTimeString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', timeOptions);
-      const dateStr = blockUntil.toLocaleDateString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', dateOptions);
-      return ctx.reply(t('checkout_blocked', lang, { time: `${dateStr} ${timeStr}` }));
-    }
-
-    // 4. Count checkouts in last 60 minutes
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const { count: checkoutCount, error: countErr } = await supabase
-      .from('subscriptions')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .gt('created_at', oneHourAgo);
-
-    if (countErr) {
-      console.error('[SPAM CHECK ERROR] Failed to count checkouts:', countErr.message);
-    } else if (checkoutCount >= 4) {
-      // Trigger lockout!
-      const blockedUntil = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6 hours
-      const newLockoutCount = (user.lockout_count || 0) + 1;
-      const requiresDecision = newLockoutCount >= 3;
-
-      await supabase
-        .from('users')
-        .update({
-          checkout_blocked_until: blockedUntil.toISOString(),
-          lockout_count: newLockoutCount,
-          requires_admin_decision: requiresDecision
-        })
-        .eq('id', user.id);
-
-      // Log spam event
-      await supabase.from('system_logs').insert({
-        level: requiresDecision ? 'ERROR' : 'INFO',
-        component: 'BOT',
-        message: `User ${user.telegram_id} locked out from checkout (Spam protection). Lockout count: ${newLockoutCount}`,
-        details: { user_id: user.id, lockout_count: newLockoutCount, requires_decision: requiresDecision }
-      });
-
-      const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
-      const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
-      const timeStr = blockedUntil.toLocaleTimeString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', timeOptions);
-      const dateStr = blockedUntil.toLocaleDateString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', dateOptions);
-      
-      if (requiresDecision) {
-        return ctx.reply(t('checkout_waiting_admin', lang));
-      } else {
-        return ctx.reply(t('checkout_blocked', lang, { time: `${dateStr} ${timeStr}` }));
-      }
-    }
+    // Perform checkout rate limit / ban checks
+    const allowed = await checkCheckoutAllowed(ctx, user, lang);
+    if (!allowed) return;
 
     // Fetch package details
     const { data: pkg, error: pkgError } = await supabase
@@ -643,6 +600,95 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
 
   // 0 EUR invoice (100% discount)
   if (finalPrice <= 0) {
+    // Check if it is a renewal / extension of an active subscription
+    if (sub.renews_subscription_id) {
+      const parentId = sub.renews_subscription_id;
+      const { data: parentSub, error: parentErr } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('id', parentId)
+        .single();
+
+      if (!parentErr && parentSub && parentSub.status === 'active') {
+        console.log(`[BOT] Processing free renewal/extension for parent subscription ${parentId}`);
+        
+        // Calculate new expires_at
+        const baseDate = new Date(parentSub.expires_at);
+        baseDate.setMonth(baseDate.getMonth() + pkg.duration_months);
+        const newExpiresAtStr = baseDate.toISOString();
+
+        // Calculate percentage-based milestones for the extended subscription
+        const activatedAt = new Date(parentSub.activated_at || parentSub.created_at);
+        const totalDur = baseDate - activatedAt;
+        const elapsed = Date.now() - activatedAt;
+        const percent = totalDur > 0 ? elapsed / totalDur : 0;
+
+        const ping_10_sent = percent >= 0.10;
+        const ping_50_sent = percent >= 0.50;
+        const ping_75_sent = percent >= 0.75;
+        const ping_90_sent = percent >= 0.90;
+
+        // Update the new subscription directly to 'active' with parent's details
+        await supabase
+          .from('subscriptions')
+          .update({
+            status: 'active',
+            key_id: parentSub.key_id,
+            spotify_email: parentSub.spotify_email,
+            spotify_password_encrypted: parentSub.spotify_password_encrypted,
+            activated_at: parentSub.activated_at || parentSub.created_at,
+            expires_at: newExpiresAtStr,
+            ping_10_sent,
+            ping_50_sent,
+            ping_75_sent,
+            ping_90_sent,
+            coupon_id: coupon ? coupon.id : null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', sub.id);
+
+        // Expire parent subscription and clear its key so the worker won't release it
+        await supabase
+          .from('subscriptions')
+          .update({
+            status: 'expired',
+            key_id: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', parentSub.id);
+
+        // Create confirmed 0-value invoice
+        const dummyAddrId = await getDummyOrFirstAddressId();
+        await supabase
+          .from('invoices')
+          .insert({
+            sub_id: sub.id,
+            ltc_address_id: dummyAddrId,
+            amount_eur: 0,
+            amount_ltc: 0,
+            status: 'confirmed',
+            expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+          });
+
+        if (coupon) {
+          await incrementCouponUses(coupon.id);
+        }
+
+        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
+
+        // Notify user about extension success
+        const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+        const localeStr = lang === 'de' ? 'de-DE' : (lang === 'ru' ? 'ru-RU' : 'en-US');
+        const dateStr = baseDate.toLocaleString(localeStr, dateOptions);
+
+        return ctx.reply(t('notify_extend_success', lang, {
+          pkgName: pkg.name || '',
+          date: dateStr
+        }), getMainMenu(lang));
+      }
+    }
+
+    // Normal free activation flow
     const { error: subUpdateErr } = await supabase
       .from('subscriptions')
       .update({
@@ -846,6 +892,252 @@ bot.action(/^check_pay_(.+)$/, async (ctx) => {
   } catch (err) {
     const user = await getOrCreateUser(ctx);
     ctx.reply(t('pay_check_error', user.language || 'en'));
+  }
+});
+
+/**
+ * Helper to validate checkout spam protection rate limits and bans.
+ * Returns true if allowed, false if blocked.
+ */
+async function checkCheckoutAllowed(ctx, user, lang) {
+  // 1. Check if user is banned
+  if (user.is_banned) {
+    await ctx.reply(t('checkout_banned', lang));
+    return false;
+  }
+
+  // 2. Check if user requires admin decision
+  if (user.requires_admin_decision) {
+    await ctx.reply(t('checkout_waiting_admin', lang));
+    return false;
+  }
+
+  // 3. Check if user is currently blocked
+  if (user.checkout_blocked_until && new Date(user.checkout_blocked_until) > new Date()) {
+    const blockUntil = new Date(user.checkout_blocked_until);
+    const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
+    const timeStr = blockUntil.toLocaleTimeString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', timeOptions);
+    const dateStr = blockUntil.toLocaleDateString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', dateOptions);
+    await ctx.reply(t('checkout_blocked', lang, { time: `${dateStr} ${timeStr}` }));
+    return false;
+  }
+
+  // 4. Count checkouts in last 60 minutes
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count: checkoutCount, error: countErr } = await supabase
+    .from('subscriptions')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gt('created_at', oneHourAgo);
+
+  if (countErr) {
+    console.error('[SPAM CHECK ERROR] Failed to count checkouts:', countErr.message);
+  } else if (checkoutCount >= 4) {
+    // Trigger lockout!
+    const blockedUntil = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6 hours
+    const newLockoutCount = (user.lockout_count || 0) + 1;
+    const requiresDecision = newLockoutCount >= 3;
+
+    await supabase
+      .from('users')
+      .update({
+        checkout_blocked_until: blockedUntil.toISOString(),
+        lockout_count: newLockoutCount,
+        requires_admin_decision: requiresDecision
+      })
+      .eq('id', user.id);
+
+    // Log spam event
+    await supabase.from('system_logs').insert({
+      level: requiresDecision ? 'ERROR' : 'INFO',
+      component: 'BOT',
+      message: `User ${user.telegram_id} locked out from checkout (Spam protection). Lockout count: ${newLockoutCount}`,
+      details: { user_id: user.id, lockout_count: newLockoutCount, requires_decision: requiresDecision }
+    });
+
+    const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
+    const timeStr = blockedUntil.toLocaleTimeString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', timeOptions);
+    const dateStr = blockedUntil.toLocaleDateString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', dateOptions);
+    
+    if (requiresDecision) {
+      await ctx.reply(t('checkout_waiting_admin', lang));
+    } else {
+      await ctx.reply(t('checkout_blocked', lang, { time: `${dateStr} ${timeStr}` }));
+    }
+    return false;
+  }
+
+  return true;
+}
+
+// Action: Handle Satisfaction Feedback Rating Click
+bot.action(/^rate_(.+)_(\d+)$/, async (ctx) => {
+  const subId = ctx.match[1];
+  const rating = parseInt(ctx.match[2]);
+  try {
+    await ctx.answerCbQuery();
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+
+    // Check if feedback already exists for this subscription to prevent spamming/tampering
+    const { data: existingFeedback, error: checkErr } = await supabase
+      .from('feedback')
+      .select('id')
+      .eq('subscription_id', subId)
+      .limit(1);
+
+    if (checkErr) throw checkErr;
+
+    if (existingFeedback && existingFeedback.length > 0) {
+      return ctx.reply(t('milestone_10_already_rated', lang));
+    }
+
+    // Insert feedback
+    const { error: insertErr } = await supabase
+      .from('feedback')
+      .insert({
+        user_id: user.id,
+        subscription_id: subId,
+        rating: rating
+      });
+
+    if (insertErr) throw insertErr;
+
+    // Create star representation for visual excellence
+    const stars = '⭐'.repeat(rating);
+
+    // Update text and remove inline keyboard
+    const updatedText = `${ctx.callbackQuery.message.text}\n\n*${t('rating_label', lang, { stars })}*\n\n${t('milestone_10_thanks', lang)}`;
+    
+    await ctx.editMessageText(updatedText, {
+      parse_mode: 'Markdown'
+    });
+  } catch (err) {
+    console.error('[BOT ERROR] Feedback rating failed:', err.message);
+    ctx.reply(t('start_error', 'en'));
+  }
+});
+
+// Action: Show renewal package selection menu
+bot.action(/^renew_menu_(.+)$/, async (ctx) => {
+  const subId = ctx.match[1];
+  try {
+    await ctx.answerCbQuery();
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+    
+    // Fetch packages
+    const { data: packages, error } = await supabase
+      .from('packages')
+      .select('*')
+      .order('price_eur', { ascending: true });
+
+    if (error || !packages || packages.length === 0) {
+      return ctx.reply(t('packages_error', lang));
+    }
+
+    let msg = t('packages_title', lang);
+    const buttons = [];
+
+    packages.forEach(pkg => {
+      const durationStr = pkg.duration_months === 1 
+        ? t('packages_duration_one', lang) 
+        : t('packages_duration_multi', lang, { months: pkg.duration_months });
+
+      msg += t('packages_price', lang, { duration: durationStr, price: pkg.price_eur.toFixed(2) });
+      buttons.push([Markup.button.callback(
+        t('packages_book_now_btn', lang, { name: pkg.name, price: pkg.price_eur.toFixed(2) }), 
+        `renew_pkg_${subId}_${pkg.id}`
+      )]);
+    });
+
+    await ctx.reply(msg, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard(buttons)
+    });
+  } catch (err) {
+    console.error('[BOT ERROR] Renew menu failed:', err.message);
+    ctx.reply(t('packages_error', 'en'));
+  }
+});
+
+// Action: Select renewal package and create draft subscription
+bot.action(/^renew_pkg_(.+)_(.+)$/, async (ctx) => {
+  const parentSubId = ctx.match[1];
+  const packageId = ctx.match[2];
+  try {
+    await ctx.answerCbQuery();
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+
+    // Perform checkout rate limit / ban checks
+    const allowed = await checkCheckoutAllowed(ctx, user, lang);
+    if (!allowed) return;
+
+    // Fetch package details
+    const { data: pkg, error: pkgError } = await supabase
+      .from('packages')
+      .select('*')
+      .eq('id', packageId)
+      .single();
+
+    if (pkgError || !pkg) {
+      return ctx.reply(t('buy_pkg_not_found', lang));
+    }
+
+    // Create renewal subscription in waiting_coupon status
+    const { data: sub, error: subError } = await supabase
+      .from('subscriptions')
+      .insert({
+        user_id: user.id,
+        package_id: pkg.id,
+        renews_subscription_id: parentSubId,
+        status: 'waiting_coupon'
+      })
+      .select()
+      .single();
+
+    if (subError || !sub) {
+      console.error(subError);
+      return ctx.reply(t('buy_order_creation_error', lang));
+    }
+
+    // Ask user if they have a coupon
+    return ctx.reply(t('coupon_ask', lang), {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback(t('coupon_enter_btn', lang), `coupon_enter_${sub.id}`)],
+        [Markup.button.callback(t('coupon_skip_btn', lang), `coupon_skip_${sub.id}`)]
+      ])
+    });
+  } catch (err) {
+    console.error('[BOT ERROR] Renew package booking failed:', err.message);
+    ctx.reply(t('invoice_internal_error', 'en'));
+  }
+});
+
+// Action: Subscribe to restock ping notifications
+bot.action('ping_subscribe', async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+
+    // Set ping_on_restock to true for this user
+    const { error } = await supabase
+      .from('users')
+      .update({ ping_on_restock: true })
+      .eq('id', user.id);
+
+    if (error) throw error;
+
+    await ctx.reply(t('ping_subscribed', lang), { parse_mode: 'Markdown' });
+  } catch (err) {
+    console.error('[BOT ERROR] Failed to subscribe to restock ping:', err.message);
+    const user = await getOrCreateUser(ctx);
+    await ctx.reply(t('start_error', user.language || 'en'));
   }
 });
 

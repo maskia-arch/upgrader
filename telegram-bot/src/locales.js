@@ -174,7 +174,20 @@ const locales = {
       `Please create or acquire a *NEW, FRESH Spotify account* (do not use the old one as it is blocked for 12 months!) and send me your new login credentials in the format:\n` +
       `\`Email:Password\`\n\n` +
       `e.g.: \`newaccount@web.com:NewPassword123\``,
-    notify_invoice_expired: '❌ *Payment window expired!*\n\nThe reservation of the Litecoin address for your order has expired. Please create a new booking if needed.'
+    notify_invoice_expired: '❌ *Payment window expired!*\n\nThe reservation of the Litecoin address for your order has expired. Please create a new booking if needed.',
+    out_of_stock: '🔴 *Temporarily Out of Stock*\n\nWe currently have no upgrade slots available. Please check back later or subscribe to get notified immediately when we restock!',
+    ping_btn: '🔔 Ping me when restocked',
+    ping_subscribed: '✅ *Subscribed!*\n\nI will send you a message as soon as upgrades are back in stock.',
+    restock_notification: '🎉 *Upgrades are back in stock!*\n\nWe have new Spotify Premium upgrades available. You can now upgrade your account using /buy.',
+    milestone_10_prompt: '⭐ *How satisfied are you with your upgrade for {pkgName} so far?*\n\nPlease rate your experience below:',
+    milestone_10_thanks: '✅ *Thank you for your rating!* Your feedback helps us improve our service.',
+    milestone_10_already_rated: '⚠️ You have already rated this subscription.',
+    milestone_50_msg: 'ℹ️ *Your Premium ({pkgName}) runs for {days} more days.*\n\nWould you like to extend your subscription now?',
+    milestone_75_msg: '⚠️ *Expiration Warning!*\n\nYour Premium ({pkgName}) expires in *{days} days*.\n\nRenew your package now to ensure uninterrupted service!',
+    milestone_90_msg: '🔥 *Last Offer - 10% Discount!*\n\nYour Premium ({pkgName}) expires in *{days} days*.\n\nExtend your subscription within the next 24 hours and get a *10% discount*!\n\nCoupon Code: `{couponCode}`\n(Tap to copy)',
+    notify_extend_success: '✅ *Subscription extended successfully!*\n\nYour Premium ({pkgName}) has been extended until: *{date}*.\n\nYou do not need to re-enter your credentials. Enjoy your music! 🎧',
+    renew_btn: '🟢 Renew / Extend Now',
+    rating_label: 'Your rating: {stars}'
   },
   de: {
     menu_book_package: '🛍️ Paket buchen',
@@ -346,7 +359,20 @@ const locales = {
       `Bitte erstelle oder besorge einen *NEUEN, FRISCHEN Spotify-Account* (nicht den alten, da dieser für 12 Monate gesperrt ist!) und sende mir deine neuen Login-Daten im Format:\n` +
       `\`E-Mail:Passwort\`\n\n` +
       `z.B.: \`neueraccount@web.de:NeuesPasswort123\``,
-    notify_invoice_expired: '❌ *Zahlungszeitraum abgelaufen!*\n\nDie Reservierung der Litecoin-Adresse für deine Bestellung ist abgelaufen. Bitte erstelle bei Bedarf eine neue Buchung.'
+    notify_invoice_expired: '❌ *Zahlungszeitraum abgelaufen!*\n\nDie Reservierung der Litecoin-Adresse für deine Bestellung ist abgelaufen. Bitte erstelle bei Bedarf eine neue Buchung.',
+    out_of_stock: '🔴 *Vorübergehend ausverkauft*\n\nAktuell sind keine Upgrade-Slots verfügbar. Bitte schaue später wieder vorbei oder abonniere Benachrichtigungen, um sofort informiert zu werden, wenn neue Lizenzen da sind!',
+    ping_btn: '🔔 Benachrichtigen bei Restock',
+    ping_subscribed: '✅ *Abonniert!*\n\nIch werde dir eine Nachricht senden, sobald wieder neue Upgrades verfügbar sind.',
+    restock_notification: '🎉 *Neue Upgrades verfügbar!*\n\nEs sind wieder neue Spotify Premium Upgrades auf Lager. Du kannst dein Upgrade jetzt über /buy starten.',
+    milestone_10_prompt: '⭐ *Wie zufrieden bist du bisher mit deinem Upgrade für {pkgName}?*\n\nBitte bewerte deine Erfahrung unten:',
+    milestone_10_thanks: '✅ *Vielen Dank für deine Bewertung!* Dein Feedback hilft uns, unseren Service zu verbessern.',
+    milestone_10_already_rated: '⚠️ Du hast dieses Abonnement bereits bewertet.',
+    milestone_50_msg: 'ℹ️ *Dein Premium ({pkgName}) läuft noch {days} Tage.*\n\nMöchtest du deine Laufzeit jetzt schon verlängern?',
+    milestone_75_msg: '⚠️ *Ablauf-Warnung!*\n\nDein Premium ({pkgName}) läuft in *{days} Tagen* ab.\n\nLade jetzt auf, um eine Unterbrechung zu vermeiden!',
+    milestone_90_msg: '🔥 *Letztes Angebot - 10% Rabatt!*\n\nDein Premium ({pkgName}) läuft in *{days} Tagen* ab.\n\nVerlängere deine Laufzeit innerhalb der nächsten 24 Stunden und erhalte *10% Rabatt*!\n\nGutscheincode: `{couponCode}`\n(Zum Kopieren anklicken)',
+    notify_extend_success: '✅ *Abonnement erfolgreich verlängert!*\n\nDein Premium ({pkgName}) wurde verlängert bis: *{date}*.\n\nDu musst deine Zugangsdaten nicht erneut eingeben. Viel Spaß beim Hören! 🎧',
+    renew_btn: '🟢 Jetzt verlängern',
+    rating_label: 'Deine Bewertung: {stars}'
   },
   ru: {
     menu_book_package: '🛍️ Заказать пакет',
@@ -520,7 +546,20 @@ const locales = {
       `Пожалуйста, создайте или подготовьте *НОВЫЙ, СВЕЖИЙ аккаунт Spotify* (не используйте старый, так как он заблокирован на 12 месяцев!) и отправьте мне новые учетные данные в формате:\n` +
       `\`Email:Пароль\`\n\n` +
       `например: \`newaccount@web.com:NewPassword123\``,
-    notify_invoice_expired: '❌ *Время оплаты истекло!*\n\nРезервирование адреса Litecoin для вашего заказа истекло. Пожалуйста, создайте новый заказ, если это необходимо.'
+    notify_invoice_expired: '❌ *Время оплаты истекло!*\n\nРезервирование адреса Litecoin для вашего заказа истекло. Пожалуйста, создайте новый заказ, если это необходимо.',
+    out_of_stock: '🔴 *Временно нет в наличии*\n\nВ настоящее время нет свободных слотов для обновления. Пожалуйста, зайдите позже или подпишитесь, чтобы получить уведомление о пополнении!',
+    ping_btn: '🔔 Уведомить о пополнении',
+    ping_subscribed: '✅ *Подписка оформлена!*\n\nЯ отправлю вам сообщение, как только появятся новые слоты.',
+    restock_notification: '🎉 *Пополнение слотов!*\n\nДоступны новые обновления Spotify Premium. Вы можете обновить свой аккаунт с помощью команды /buy.',
+    milestone_10_prompt: '⭐ *Насколько вы довольны обновлением {pkgName} на данный момент?*\n\nПожалуйста, оцените ваш опыт ниже:',
+    milestone_10_thanks: '✅ *Спасибо за вашу оценку!* Ваш отзыв помогает нам улучшать наш сервис.',
+    milestone_10_already_rated: '⚠️ Вы уже оценили эту подписку.',
+    milestone_50_msg: 'ℹ️ *Ваша подписка Premium ({pkgName}) действует еще {days} дн.*\n\nХотите продлить её прямо сейчас?',
+    milestone_75_msg: '⚠️ *Предупреждение об окончании!*\n\nВаша подписка ({pkgName}) истекает через *{days} дн.*.\n\nПродлите подписку сейчас, чтобы избежать перебоев!',
+    milestone_90_msg: '🔥 *Последний шанс - скидка 10%!*\n\nВаша подписка ({pkgName}) истекает через *{days} дн.*.\n\nПродлите подписку в течение следующих 24 часов и получите *скидку 10%*!\n\nПромокод: `{couponCode}`\n(Нажмите для копирования)',
+    notify_extend_success: '✅ *Подписка успешно продлена!*\n\nВаша подписка ({pkgName}) продлена до: *{date}*.\n\nВам не нужно заново вводить свои учетные данные. Приятного прослушивания! 🎧',
+    renew_btn: '🟢 Продлить прямо сейчас',
+    rating_label: 'Ваша оценка: {stars}'
   }
 };
 

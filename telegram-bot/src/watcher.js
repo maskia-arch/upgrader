@@ -1,5 +1,6 @@
 const { supabase } = require('./db');
 const { decrypt } = require('./crypto');
+const { Markup } = require('telegraf');
 const { checkPayment } = require('./blockchain');
 const { renewAccount, getKeyInfo } = require('./upgrader');
 const { t } = require('./locales');
@@ -33,7 +34,7 @@ async function watchPayments() {
   try {
     const { data: invoices, error } = await supabase
       .from('invoices')
-      .select('*, ltc_addresses(ltc_address), subscriptions(user_id, coupon_id, users(telegram_id, language))')
+      .select('*, ltc_addresses(ltc_address), subscriptions(user_id, coupon_id, renews_subscription_id, package_id, packages(name, duration_months), users(telegram_id, language))')
       .in('status', ['unpaid', 'detected']);
 
     if (error) throw error;
@@ -70,10 +71,99 @@ async function watchPayments() {
         const check = await checkPayment(address, inv.amount_ltc);
 
         if (check.found) {
-          if (check.confirmed) {
+           if (check.confirmed) {
             console.log(`[WATCHER] Payment CONFIRMED for invoice ${inv.id}`);
             
-            // Update DB
+            // Check if it is a renewal / extension of an active subscription
+            if (inv.subscriptions && inv.subscriptions.renews_subscription_id) {
+              const parentId = inv.subscriptions.renews_subscription_id;
+              
+              // Query parent subscription
+              const { data: parentSub, error: parentErr } = await supabase
+                .from('subscriptions')
+                .select('*')
+                .eq('id', parentId)
+                .single();
+
+              if (!parentErr && parentSub && parentSub.status === 'active') {
+                console.log(`[WATCHER] Processing renewal for parent subscription ${parentId}`);
+                
+                // Calculate new expires_at
+                const baseDate = new Date(parentSub.expires_at);
+                const durationMonths = inv.subscriptions.packages?.duration_months || 1;
+                baseDate.setMonth(baseDate.getMonth() + durationMonths);
+                const newExpiresAtStr = baseDate.toISOString();
+
+                // Calculate percentage-based milestones for the extended subscription
+                const activatedAt = new Date(parentSub.activated_at || parentSub.created_at);
+                const totalDur = baseDate - activatedAt;
+                const elapsed = Date.now() - activatedAt;
+                const percent = totalDur > 0 ? elapsed / totalDur : 0;
+
+                const ping_10_sent = percent >= 0.10;
+                const ping_50_sent = percent >= 0.50;
+                const ping_75_sent = percent >= 0.75;
+                const ping_90_sent = percent >= 0.90;
+
+                // Update the new subscription directly to 'active' with parent's details
+                await supabase
+                  .from('subscriptions')
+                  .update({
+                    status: 'active',
+                    key_id: parentSub.key_id,
+                    spotify_email: parentSub.spotify_email,
+                    spotify_password_encrypted: parentSub.spotify_password_encrypted,
+                    activated_at: parentSub.activated_at || parentSub.created_at,
+                    expires_at: newExpiresAtStr,
+                    ping_10_sent,
+                    ping_50_sent,
+                    ping_75_sent,
+                    ping_90_sent,
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', inv.sub_id);
+
+                // Expire parent subscription and clear its key so the worker won't release it
+                await supabase
+                  .from('subscriptions')
+                  .update({
+                    status: 'expired',
+                    key_id: null,
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', parentSub.id);
+
+                // Update invoice & address status
+                await supabase.from('invoices').update({ status: 'confirmed', tx_hash: check.txHash }).eq('id', inv.id);
+                await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', inv.ltc_address_id);
+
+                if (inv.subscriptions.coupon_id) {
+                  await incrementCouponUses(inv.subscriptions.coupon_id);
+                }
+
+                await supabase.from('system_logs').insert({
+                  level: 'INFO',
+                  component: 'WATCHER',
+                  message: `Subscription ${parentSub.id} successfully renewed/extended by sub ${inv.sub_id}`,
+                  details: { parent_id: parentSub.id, sub_id: inv.sub_id, new_expires_at: newExpiresAtStr }
+                });
+
+                if (telegramId) {
+                  const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+                  const localeStr = language === 'de' ? 'de-DE' : (language === 'ru' ? 'ru-RU' : 'en-US');
+                  const dateStr = baseDate.toLocaleString(localeStr, dateOptions);
+                  
+                  await notifyUser(telegramId, t('notify_extend_success', language, {
+                    pkgName: inv.subscriptions.packages?.name || '',
+                    date: dateStr
+                  }));
+                }
+
+                continue; // Skip normal activation
+              }
+            }
+
+            // Normal Activation Flow
             await supabase.from('invoices').update({ status: 'confirmed', tx_hash: check.txHash }).eq('id', inv.id);
             await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', inv.ltc_address_id);
             await supabase.from('subscriptions').update({ status: 'activating', updated_at: new Date().toISOString() }).eq('id', inv.sub_id);
@@ -248,13 +338,19 @@ async function watchUpgrades() {
           }
 
           // Update DB
+          const nowStr = new Date().toISOString();
+          const updateData = {
+            status: 'active',
+            expires_at: expiresAt.toISOString(),
+            updated_at: nowStr
+          };
+          if (!sub.activated_at) {
+            updateData.activated_at = nowStr;
+          }
+
           await supabase
             .from('subscriptions')
-            .update({
-              status: 'active',
-              expires_at: expiresAt.toISOString(),
-              updated_at: new Date().toISOString()
-            })
+            .update(updateData)
             .eq('id', sub.id);
 
           await supabase
@@ -526,6 +622,236 @@ async function checkFailedDeliveries() {
 }
 
 /**
+ * 6. Restock Notification Watcher Loop
+ * Checks if any users have opted in to restock notifications.
+ * If there are usable keys available, sends direct messages to them and resets their opt-in flag.
+ */
+async function checkRestockNotifications() {
+  console.log('[WORKER] Checking for restock notifications...');
+  try {
+    // Check if any users have subscribed to restock notifications
+    const { data: usersToNotify, error: userErr } = await supabase
+      .from('users')
+      .select('id, telegram_id, language')
+      .eq('ping_on_restock', true);
+
+    if (userErr) throw userErr;
+    if (!usersToNotify || usersToNotify.length === 0) return;
+
+    // Check if we have usable keys (> 0)
+    const { count: usableCount, error: countErr } = await supabase
+      .from('upgrader_keys')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'usable');
+
+    if (countErr) throw countErr;
+
+    if (usableCount > 0) {
+      console.log(`[WORKER] Restock detected! Notifying ${usersToNotify.length} users.`);
+      
+      const userIdsToReset = [];
+
+      for (const u of usersToNotify) {
+        if (!u.telegram_id) continue;
+        const language = u.language || 'en';
+        try {
+          await notifyUser(u.telegram_id, t('restock_notification', language));
+          userIdsToReset.push(u.id);
+        } catch (sendErr) {
+          console.error(`[WORKER ERROR] Failed to send restock notification to user ${u.telegram_id}:`, sendErr.message);
+        }
+      }
+
+      if (userIdsToReset.length > 0) {
+        // Reset ping_on_restock status for successfully notified users
+        const { error: updateErr } = await supabase
+          .from('users')
+          .update({ ping_on_restock: false })
+          .in('id', userIdsToReset);
+
+        if (updateErr) {
+          console.error('[WORKER ERROR] Failed to reset ping_on_restock status for users:', updateErr.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[WORKER ERROR] Error in checkRestockNotifications loop:', err.message);
+  }
+}
+
+/**
+ * 7. Subscription Milestones Watcher Loop
+ * Monitors active subscriptions and sends satisfaction prompts or renewal alerts based on progress.
+ */
+async function checkSubscriptionMilestones() {
+  console.log('[WORKER] Checking active subscriptions for milestone alerts...');
+  try {
+    const { data: activeSubs, error } = await supabase
+      .from('subscriptions')
+      .select('*, packages(name, duration_months), users(telegram_id, language)')
+      .eq('status', 'active');
+
+    if (error) throw error;
+    if (!activeSubs || activeSubs.length === 0) return;
+
+    const now = new Date();
+
+    for (const sub of activeSubs) {
+      if (!sub.users || !sub.users.telegram_id) continue;
+
+      // Fallback: if activated_at is missing, set it to created_at
+      let activatedAt = sub.activated_at;
+      if (!activatedAt) {
+        activatedAt = sub.created_at;
+        await supabase
+          .from('subscriptions')
+          .update({ activated_at: activatedAt })
+          .eq('id', sub.id);
+      }
+
+      const activatedDate = new Date(activatedAt);
+      const expiresDate = new Date(sub.expires_at);
+      const totalDur = expiresDate - activatedDate;
+      const elapsed = now - activatedDate;
+
+      if (totalDur <= 0) continue;
+
+      const percent = elapsed / totalDur;
+      const language = sub.users.language || 'en';
+      const pkgName = sub.packages?.name || '';
+
+      // 1. 10% Milestone: Satisfaction Rating
+      if (percent >= 0.10 && !sub.ping_10_sent) {
+        console.log(`[WORKER] Sending 10% milestone satisfaction rating for sub ${sub.id} to user ${sub.users.telegram_id}`);
+        
+        try {
+          await telegramBot.telegram.sendMessage(
+            sub.users.telegram_id,
+            t('milestone_10_prompt', language, { pkgName }),
+            {
+              parse_mode: 'Markdown',
+              ...Markup.inlineKeyboard([
+                [
+                  Markup.button.callback('1 ⭐', `rate_${sub.id}_1`),
+                  Markup.button.callback('2 ⭐', `rate_${sub.id}_2`),
+                  Markup.button.callback('3 ⭐', `rate_${sub.id}_3`),
+                  Markup.button.callback('4 ⭐', `rate_${sub.id}_4`),
+                  Markup.button.callback('5 ⭐', `rate_${sub.id}_5`)
+                ]
+              ])
+            }
+          );
+          
+          await supabase
+            .from('subscriptions')
+            .update({ ping_10_sent: true, updated_at: now.toISOString() })
+            .eq('id', sub.id);
+        } catch (sendErr) {
+          console.error(`[WORKER ERROR] Failed to send 10% milestone to user ${sub.users.telegram_id}:`, sendErr.message);
+        }
+      }
+
+      // 2. 50% Milestone: Remaining Runtime Notification
+      else if (percent >= 0.50 && !sub.ping_50_sent) {
+        console.log(`[WORKER] Sending 50% milestone alert for sub ${sub.id}`);
+        const days = Math.ceil((expiresDate - now) / (1000 * 60 * 60 * 24));
+        
+        try {
+          await telegramBot.telegram.sendMessage(
+            sub.users.telegram_id,
+            t('milestone_50_msg', language, { pkgName, days }),
+            {
+              parse_mode: 'Markdown',
+              ...Markup.inlineKeyboard([
+                [Markup.button.callback(t('renew_btn', language), `renew_menu_${sub.id}`)]
+              ])
+            }
+          );
+          
+          await supabase
+            .from('subscriptions')
+            .update({ ping_50_sent: true, updated_at: now.toISOString() })
+            .eq('id', sub.id);
+        } catch (sendErr) {
+          console.error(`[WORKER ERROR] Failed to send 50% milestone to user ${sub.users.telegram_id}:`, sendErr.message);
+        }
+      }
+
+      // 3. 75% Milestone: Expiration Warning
+      else if (percent >= 0.75 && !sub.ping_75_sent) {
+        console.log(`[WORKER] Sending 75% milestone warning for sub ${sub.id}`);
+        const days = Math.ceil((expiresDate - now) / (1000 * 60 * 60 * 24));
+        
+        try {
+          await telegramBot.telegram.sendMessage(
+            sub.users.telegram_id,
+            t('milestone_75_msg', language, { pkgName, days }),
+            {
+              parse_mode: 'Markdown',
+              ...Markup.inlineKeyboard([
+                [Markup.button.callback(t('renew_btn', language), `renew_menu_${sub.id}`)]
+              ])
+            }
+          );
+          
+          await supabase
+            .from('subscriptions')
+            .update({ ping_75_sent: true, updated_at: now.toISOString() })
+            .eq('id', sub.id);
+        } catch (sendErr) {
+          console.error(`[WORKER ERROR] Failed to send 75% milestone to user ${sub.users.telegram_id}:`, sendErr.message);
+        }
+      }
+
+      // 4. 90% Milestone: 10% Discount Code Promotion
+      else if (percent >= 0.90 && !sub.ping_90_sent) {
+        console.log(`[WORKER] Sending 90% milestone discount offer for sub ${sub.id}`);
+        const days = Math.ceil((expiresDate - now) / (1000 * 60 * 60 * 24));
+        
+        try {
+          // Generate a custom coupon valid for 24 hours
+          const randSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
+          const couponCode = `RENEW10-${randSuffix}`;
+          
+          // Insert coupon
+          const { error: couponErr } = await supabase
+            .from('coupons')
+            .insert({
+              code: couponCode,
+              discount_type: 'percentage',
+              discount_value: 10.00,
+              expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+              max_uses: 1
+            });
+            
+          if (couponErr) throw couponErr;
+
+          await telegramBot.telegram.sendMessage(
+            sub.users.telegram_id,
+            t('milestone_90_msg', language, { pkgName, days, couponCode }),
+            {
+              parse_mode: 'Markdown',
+              ...Markup.inlineKeyboard([
+                [Markup.button.callback(t('renew_btn', language), `renew_menu_${sub.id}`)]
+              ])
+            }
+          );
+          
+          await supabase
+            .from('subscriptions')
+            .update({ ping_90_sent: true, updated_at: now.toISOString() })
+            .eq('id', sub.id);
+        } catch (sendErr) {
+          console.error(`[WORKER ERROR] Failed to send 90% milestone to user ${sub.users.telegram_id}:`, sendErr.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[WORKER ERROR] Error in checkSubscriptionMilestones loop:', err.message);
+  }
+}
+
+/**
  * Start all worker loop timers
  */
 function startWatcher(botInstance) {
@@ -555,6 +881,14 @@ function startWatcher(botInstance) {
   // Run failed delivery checks every 10 minutes (600000 ms)
   setInterval(checkFailedDeliveries, 600000);
   checkFailedDeliveries(); // Run immediately
+
+  // Run restock checks every 60 seconds (60000 ms)
+  setInterval(checkRestockNotifications, 60000);
+  checkRestockNotifications(); // Run immediately
+
+  // Run milestone checks every 5 minutes (300000 ms)
+  setInterval(checkSubscriptionMilestones, 300000);
+  checkSubscriptionMilestones(); // Run immediately
 }
 
 module.exports = {
@@ -565,4 +899,8 @@ module.exports = {
   checkReplacements,
   watchBroadcasts,
   checkFailedDeliveries,
+  checkRestockNotifications,
+  checkSubscriptionMilestones,
 };
+
+

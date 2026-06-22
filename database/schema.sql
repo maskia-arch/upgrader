@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS users (
     lockout_count INTEGER NOT NULL DEFAULT 0,
     is_banned BOOLEAN NOT NULL DEFAULT FALSE,
     requires_admin_decision BOOLEAN NOT NULL DEFAULT FALSE,
+    ping_on_restock BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -77,6 +78,12 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     spotify_password_encrypted TEXT,
     status TEXT NOT NULL DEFAULT 'pending_payment' CHECK (status IN ('waiting_coupon', 'pending_payment', 'activating', 'active', 'expired', 'renewing', 'failed', 'cancelled')),
     expires_at TIMESTAMPTZ,
+    activated_at TIMESTAMPTZ,
+    renews_subscription_id UUID REFERENCES subscriptions(id) ON DELETE SET NULL,
+    ping_10_sent BOOLEAN NOT NULL DEFAULT FALSE,
+    ping_50_sent BOOLEAN NOT NULL DEFAULT FALSE,
+    ping_75_sent BOOLEAN NOT NULL DEFAULT FALSE,
+    ping_90_sent BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -125,3 +132,13 @@ CREATE TABLE IF NOT EXISTS broadcasts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_broadcasts_status_sched ON broadcasts (status, scheduled_at);
+
+-- 9. Feedback
+CREATE TABLE IF NOT EXISTS feedback (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+    comment TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
