@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     ltc_address_id UUID NOT NULL REFERENCES ltc_addresses(id),
     amount_eur NUMERIC(10, 2) NOT NULL,
     amount_ltc NUMERIC(20, 8) NOT NULL,
+    paid_amount_ltc NUMERIC(20, 8) NOT NULL DEFAULT 0.00000000,
     tx_hash TEXT,
     status TEXT NOT NULL DEFAULT 'unpaid' CHECK (status IN ('unpaid', 'detected', 'confirmed', 'expired')),
     expires_at TIMESTAMPTZ NOT NULL,
@@ -140,5 +141,15 @@ CREATE TABLE IF NOT EXISTS feedback (
     subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
     rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
     comment TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 10. Bot Messages Cleanup
+CREATE TABLE IF NOT EXISTS bot_messages_cleanup (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    chat_id BIGINT NOT NULL,
+    message_id BIGINT NOT NULL,
+    delete_at TIMESTAMPTZ,
+    type TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

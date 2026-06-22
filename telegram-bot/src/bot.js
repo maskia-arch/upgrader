@@ -6,6 +6,7 @@ const { encrypt, decrypt } = require('./crypto');
 const { fetchLtcPrice, checkPayment } = require('./blockchain');
 const { upgradeAccount, renewAccount } = require('./upgrader');
 const { t } = require('./locales');
+const { registerMessageForDeletion, deleteMessagesByType } = require('./cleanup');
 
 const bot = new Telegraf(config.telegramToken);
 
@@ -116,6 +117,7 @@ async function handleShowPackages(ctx) {
   try {
     const user = await getOrCreateUser(ctx);
     const lang = user.language || 'en';
+    await deleteMessagesByType(ctx, ctx.chat.id, `packages_menu_${user.id}`);
     
     // Check if upgrades are active (we have > 0 usable keys)
     const { count: usableCount, error: countErr } = await supabase
@@ -163,10 +165,11 @@ async function handleShowPackages(ctx) {
       }]);
     });
 
-    await ctx.reply(msg, {
+    const sentMsg = await ctx.reply(msg, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard(buttons)
     });
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `packages_menu_${user.id}`);
   } catch (err) {
     console.error(err);
     ctx.reply(t('packages_error', 'en'));
@@ -245,10 +248,11 @@ async function handleShowSubscriptions(ctx) {
         buttons.push([{ ...Markup.button.callback(t('subs_reenter_credentials_btn', lang), `enter_credentials_${sub.id}`), style: 'success' }]);
       }
 
-      await ctx.reply(subInfo, {
+      const sentMsg = await ctx.reply(subInfo, {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard(buttons)
       });
+      await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
     }
   } catch (err) {
     console.error(err);
@@ -260,7 +264,8 @@ async function handleShowFAQ(ctx) {
   try {
     const user = await getOrCreateUser(ctx);
     const lang = user.language || 'en';
-    await ctx.reply(t('faq_text', lang), { parse_mode: 'Markdown', ...getMainMenu(lang) });
+    const sentMsg = await ctx.reply(t('faq_text', lang), { parse_mode: 'Markdown', ...getMainMenu(lang) });
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
   } catch (err) {
     console.error(err);
   }
@@ -270,7 +275,8 @@ async function handleShowLanguage(ctx) {
   try {
     const user = await getOrCreateUser(ctx);
     const lang = user.language || 'en';
-    await ctx.reply(t('lang_selection_prompt', lang), {
+    await deleteMessagesByType(ctx, ctx.chat.id, `lang_prompt_${user.id}`);
+    const sentMsg = await ctx.reply(t('lang_selection_prompt', lang), {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [
@@ -280,6 +286,7 @@ async function handleShowLanguage(ctx) {
         ]
       ])
     });
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `lang_prompt_${user.id}`);
   } catch (err) {
     console.error(err);
   }
@@ -326,7 +333,10 @@ bot.action(/^set_lang_(en|de|ru)$/, async (ctx) => {
       .update({ language: selectedLang })
       .eq('id', user.id);
 
-    await ctx.reply(t('lang_changed', selectedLang), getMainMenu(selectedLang));
+    await deleteMessagesByType(ctx, ctx.chat.id, `lang_prompt_${user.id}`);
+
+    const sentMsg = await ctx.reply(t('lang_changed', selectedLang), getMainMenu(selectedLang));
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
   } catch (err) {
     console.error('[BOT ERROR] Set language failed:', err);
     ctx.reply('Error updating language / Fehler beim Ändern der Sprache / Ошибка при изменении языка');
@@ -372,17 +382,17 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
       return ctx.reply(t('buy_order_creation_error', lang));
     }
 
+    await deleteMessagesByType(ctx, ctx.chat.id, `packages_menu_${user.id}`);
+
     // Ask user if they have a coupon
-    return ctx.reply(t('coupon_ask', lang), {
+    const sentMsg = await ctx.reply(t('coupon_ask', lang), {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [{ ...Markup.button.callback(t('coupon_enter_btn', lang), `coupon_enter_${sub.id}`), style: 'primary' }],
         [{ ...Markup.button.callback(t('coupon_skip_btn', lang), `coupon_skip_${sub.id}`), style: 'success' }]
       ])
     });
-
-    // Send Payment invoice info
-    await sendPaymentInvoice(ctx, sub.id, invoice, selectedAddressObj.ltc_address, pkg.name);
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `coupon_prompt_${sub.id}`);
   } catch (err) {
     console.error(err);
     ctx.reply(t('invoice_internal_error', 'en'));
@@ -410,7 +420,8 @@ async function sendPaymentInvoice(ctx, subId, invoice, address, packageName) {
     [{ ...Markup.button.callback(t('invoice_cancel_btn', lang), `cancel_pay_${invoice.id}`), style: 'danger' }]
   ]);
 
-  await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
+  const sentMsg = await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
+  await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `invoice_prompt_${invoice.id}`);
 }
 
 // Action: Display Payment Details
@@ -528,7 +539,11 @@ bot.action(/^cancel_pay_(.+)$/, async (ctx) => {
       .update({ status: 'cancelled' })
       .eq('id', invoice.sub_id);
 
-    await ctx.reply(t('pay_cancel_success', lang), getMainMenu(lang));
+    await deleteMessagesByType(ctx, ctx.chat.id, `invoice_prompt_${invoiceId}`);
+    await deleteMessagesByType(ctx, ctx.chat.id, `partial_pay_alert_${invoiceId}`);
+
+    const sentMsg = await ctx.reply(t('pay_cancel_success', lang), getMainMenu(lang));
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
   } catch (err) {
     const user = await getOrCreateUser(ctx);
     ctx.reply(t('pay_cancel_error', user.language || 'en'));
@@ -576,6 +591,8 @@ bot.action(/^coupon_skip_(.+)$/, async (ctx) => {
     if (subErr || !sub || sub.status !== 'waiting_coupon') {
       return ctx.reply(t('buy_order_creation_error', lang));
     }
+
+    await deleteMessagesByType(ctx, ctx.chat.id, `coupon_prompt_${subId}`);
 
     const statusMsg = await ctx.reply(t('invoice_generating', lang));
     await proceedWithPayment(ctx, sub, sub.packages, null, statusMsg, lang, user);
@@ -690,10 +707,11 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
         const localeStr = lang === 'de' ? 'de-DE' : (lang === 'ru' ? 'ru-RU' : 'en-US');
         const dateStr = baseDate.toLocaleString(localeStr, dateOptions);
 
-        return ctx.reply(t('notify_extend_success', lang, {
+        const sentMsg = await ctx.reply(t('notify_extend_success', lang, {
           pkgName: pkg.name || '',
           date: dateStr
         }), getMainMenu(lang));
+        await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
       }
     }
 
@@ -728,7 +746,9 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
     if (invErr) console.error('[DB ERROR] Failed to create 0-value invoice:', invErr);
 
     await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
-    return ctx.reply(t('coupon_free_confirmed', lang));
+    const sentMsg = await ctx.reply(t('coupon_free_confirmed', lang));
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `credentials_prompt_${sub.id}`);
+    return;
   }
 
   let ltcRate;
@@ -820,7 +840,8 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
   await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
 
   if (coupon) {
-    await ctx.reply(t('coupon_applied_success', lang, { discount: discountDisplay }), { parse_mode: 'Markdown' });
+    const sentMsg = await ctx.reply(t('coupon_applied_success', lang, { discount: discountDisplay }), { parse_mode: 'Markdown' });
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
   }
 
   await sendPaymentInvoice(ctx, sub.id, invoice, selectedAddressObj.ltc_address, pkg.name);
@@ -847,60 +868,97 @@ bot.action(/^check_pay_(.+)$/, async (ctx) => {
       .single();
 
     if (error || !invoice) {
-      return ctx.reply(t('pay_check_invoice_not_found', lang));
+      const sentMsg = await ctx.reply(t('pay_check_invoice_not_found', lang));
+      await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
+      return;
     }
 
     if (invoice.status === 'confirmed') {
-      return ctx.reply(t('pay_check_confirmed', lang));
+      const sentMsg = await ctx.reply(t('pay_check_confirmed', lang));
+      await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
+      return;
     }
 
     // Call blockchain check
     const check = await checkPayment(invoice.ltc_addresses.ltc_address, invoice.amount_ltc);
 
     if (check.found) {
-      if (check.confirmed) {
-        // Confirm invoice
-        await supabase
-          .from('invoices')
-          .update({ status: 'confirmed', tx_hash: check.txHash })
-          .eq('id', invoiceId);
+      const target = invoice.amount_ltc;
+      const received = check.paidAmount || 0;
 
-        await supabase
-          .from('ltc_addresses')
-          .update({ is_reserved: false, reserved_until: null })
-          .eq('id', invoice.ltc_address_id);
+      if (received >= 0.99 * target) {
+        if (check.confirmed) {
+          // Confirm invoice
+          await supabase
+            .from('invoices')
+            .update({ status: 'confirmed', tx_hash: check.txHash, paid_amount_ltc: received })
+            .eq('id', invoiceId);
 
-        await supabase
-          .from('subscriptions')
-          .update({ status: 'activating' })
-          .eq('id', invoice.sub_id);
+          await supabase
+            .from('ltc_addresses')
+            .update({ is_reserved: false, reserved_until: null })
+            .eq('id', invoice.ltc_address_id);
 
-        if (invoice.subscriptions && invoice.subscriptions.coupon_id) {
-          await incrementCouponUses(invoice.subscriptions.coupon_id);
+          await supabase
+            .from('subscriptions')
+            .update({ status: 'activating' })
+            .eq('id', invoice.sub_id);
+
+          if (invoice.subscriptions && invoice.subscriptions.coupon_id) {
+            await incrementCouponUses(invoice.subscriptions.coupon_id);
+          }
+
+          // Delete invoice prompt and partial payment alerts immediately
+          await deleteMessagesByType(ctx, ctx.chat.id, `invoice_prompt_${invoiceId}`);
+          await deleteMessagesByType(ctx, ctx.chat.id, `partial_pay_alert_${invoiceId}`);
+
+          const sentMsg = await ctx.reply(
+            t('pay_check_confirmed_success', lang, { txHash: check.txHash.substring(0, 10) }),
+            { parse_mode: 'Markdown' }
+          );
+          // Register the credentials prompt for deletion when submitted
+          await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `credentials_prompt_${invoice.sub_id}`);
+        } else {
+          // Detected but unconfirmed
+          await supabase
+            .from('invoices')
+            .update({ status: 'detected', tx_hash: check.txHash, paid_amount_ltc: received })
+            .eq('id', invoiceId);
+
+          const sentMsg = await ctx.reply(
+            t('pay_check_detected', lang, { txHash: check.txHash.substring(0, 16) }),
+            { parse_mode: 'Markdown' }
+          );
+          await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
         }
-
-        await ctx.reply(
-          t('pay_check_confirmed_success', lang, { txHash: check.txHash.substring(0, 10) }),
-          { parse_mode: 'Markdown' }
-        );
       } else {
-        // Detected but unconfirmed
+        // Underpaid / Partial payment
         await supabase
           .from('invoices')
-          .update({ status: 'detected', tx_hash: check.txHash })
+          .update({ paid_amount_ltc: received })
           .eq('id', invoiceId);
 
-        await ctx.reply(
-          t('pay_check_detected', lang, { txHash: check.txHash.substring(0, 16) }),
-          { parse_mode: 'Markdown' }
-        );
+        await deleteMessagesByType(ctx, ctx.chat.id, `partial_pay_alert_${invoiceId}`);
+
+        const remaining = (target - received).toFixed(8);
+        const msg = t('pay_underpaid', lang, {
+          received: received.toFixed(8),
+          target: target.toFixed(8),
+          remaining: remaining,
+          address: invoice.ltc_addresses.ltc_address
+        });
+
+        const sentMsg = await ctx.reply(msg, { parse_mode: 'Markdown' });
+        await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `partial_pay_alert_${invoiceId}`);
       }
     } else {
-      ctx.reply(t('pay_check_no_tx', lang));
+      const sentMsg = await ctx.reply(t('pay_check_no_tx', lang));
+      await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
     }
   } catch (err) {
     const user = await getOrCreateUser(ctx);
-    ctx.reply(t('pay_check_error', user.language || 'en'));
+    const sentMsg = await ctx.reply(t('pay_check_error', user.language || 'en'));
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
   }
 });
 
@@ -1034,6 +1092,7 @@ bot.action(/^renew_menu_(.+)$/, async (ctx) => {
   const subId = ctx.match[1];
   try {
     await ctx.answerCbQuery();
+    await ctx.deleteMessage().catch(() => {});
     const user = await getOrCreateUser(ctx);
     const lang = user.language || 'en';
     
@@ -1117,13 +1176,14 @@ bot.action(/^renew_pkg_(.+)_(.+)$/, async (ctx) => {
     }
 
     // Ask user if they have a coupon
-    return ctx.reply(t('coupon_ask', lang), {
+    const sentMsg = await ctx.reply(t('coupon_ask', lang), {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [{ ...Markup.button.callback(t('coupon_enter_btn', lang), `coupon_enter_${sub.id}`), style: 'primary' }],
         [{ ...Markup.button.callback(t('coupon_skip_btn', lang), `coupon_skip_${sub.id}`), style: 'success' }]
       ])
     });
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `coupon_prompt_${sub.id}`);
   } catch (err) {
     console.error('[BOT ERROR] Renew package booking failed:', err.message);
     ctx.reply(t('invoice_internal_error', 'en'));
@@ -1161,26 +1221,34 @@ bot.action(/^replace_ask_(.+)$/, async (ctx) => {
     const user = await getOrCreateUser(ctx);
     const lang = user.language || 'en';
 
-    await ctx.reply(
+    await deleteMessagesByType(ctx, ctx.chat.id, `replace_prompt_${subId}`);
+
+    const sentMsg = await ctx.reply(
       t('replace_ask_text', lang),
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           [{ ...Markup.button.callback(t('replace_ask_confirm_btn', lang), `replace_confirm_${subId}`), style: 'danger' }],
-          [{ ...Markup.button.callback(t('replace_ask_cancel_btn', lang), 'cancel_replace'), style: 'primary' }]
+          [{ ...Markup.button.callback(t('replace_ask_cancel_btn', lang), `cancel_replace_${subId}`), style: 'primary' }]
         ])
       }
     );
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `replace_prompt_${subId}`);
   } catch (err) {
     ctx.reply('❌ Error / Fehler / Ошибка');
   }
 });
 
-bot.action('cancel_replace', async (ctx) => {
+bot.action(/^cancel_replace_(.+)$/, async (ctx) => {
+  const subId = ctx.match[1];
   await ctx.answerCbQuery();
   const user = await getOrCreateUser(ctx);
   const lang = user.language || 'en';
-  await ctx.reply(t('replace_ask_cancel_msg', lang), getMainMenu(lang));
+  
+  await deleteMessagesByType(ctx, ctx.chat.id, `replace_prompt_${subId}`);
+
+  const sentMsg = await ctx.reply(t('replace_ask_cancel_msg', lang), getMainMenu(lang));
+  await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
 });
 
 // Action: Confirm Replace
@@ -1198,15 +1266,21 @@ bot.action(/^replace_confirm_(.+)$/, async (ctx) => {
 
     if (error || !sub || sub.status !== 'active') {
       const user = await getOrCreateUser(ctx);
-      return ctx.reply(t('replace_confirm_not_active', user.language || 'en'));
+      const sentMsg = await ctx.reply(t('replace_confirm_not_active', user.language || 'en'));
+      await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
+      return;
     }
 
     const lang = sub.users?.language || 'en';
 
+    await deleteMessagesByType(ctx, ctx.chat.id, `replace_prompt_${subId}`);
+
     // Check if the user is banned due to too many flags
     const currentFlags = (sub.users && sub.users.flags) || 0;
     if (currentFlags >= 3) {
-      return ctx.reply(t('replace_blocked', lang));
+      const sentMsg = await ctx.reply(t('replace_blocked', lang));
+      await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
+      return;
     }
 
     let isPremiumActive = false;
@@ -1246,7 +1320,9 @@ bot.action(/^replace_confirm_(.+)$/, async (ctx) => {
         details: { sub_id: sub.id, key: sub.upgrader_keys?.api_key, current_flags: newFlags }
       });
 
-      return ctx.reply(t('replace_error_still_active', lang, { flags: newFlags }));
+      const sentMsg = await ctx.reply(t('replace_error_still_active', lang, { flags: newFlags }));
+      await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
+      return;
     }
 
     // Set subscription status to renewing
@@ -1266,11 +1342,13 @@ bot.action(/^replace_confirm_(.+)$/, async (ctx) => {
       });
     }
 
-    await ctx.reply(t('replace_started', lang));
+    const sentMsg = await ctx.reply(t('replace_started', lang));
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
   } catch (err) {
     console.error('[BOT ERROR] Replace confirm error:', err);
     const user = await getOrCreateUser(ctx);
-    ctx.reply(t('replace_error', user.language || 'en'));
+    const sentMsg = await ctx.reply(t('replace_error', user.language || 'en'));
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
   }
 });
 
@@ -1281,7 +1359,11 @@ bot.action(/^enter_credentials_(.+)$/, async (ctx) => {
     await ctx.answerCbQuery();
     const user = await getOrCreateUser(ctx);
     const lang = user.language || 'en';
-    await ctx.reply(t('credentials_prompt', lang));
+
+    await deleteMessagesByType(ctx, ctx.chat.id, `credentials_prompt_${subId}`);
+
+    const sentMsg = await ctx.reply(t('credentials_prompt', lang));
+    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `credentials_prompt_${subId}`);
   } catch (err) {
     console.error('[BOT ERROR] Enter credentials error:', err);
   }
@@ -1320,15 +1402,18 @@ bot.on('text', async (ctx) => {
                       (coupon.max_uses === null || coupon.use_count < coupon.max_uses);
 
       if (!isValid) {
-        return ctx.reply(t('coupon_invalid', lang), {
+        const sentMsg = await ctx.reply(t('coupon_invalid', lang), {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
             [{ ...Markup.button.callback(t('coupon_retry_btn', lang), `coupon_enter_${couponSub.id}`), style: 'primary' }],
             [{ ...Markup.button.callback(t('coupon_skip_btn', lang), `coupon_skip_${couponSub.id}`), style: 'success' }]
           ])
         });
+        await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `coupon_prompt_${couponSub.id}`);
+        return;
       }
 
+      await deleteMessagesByType(ctx, ctx.chat.id, `coupon_prompt_${couponSub.id}`);
       const statusMsg = await ctx.reply(t('invoice_generating', lang));
       try {
         await proceedWithPayment(ctx, couponSub, couponSub.packages, coupon, statusMsg, lang, user);
@@ -1362,12 +1447,16 @@ bot.on('text', async (ctx) => {
       return ctx.reply(t('credentials_not_waiting', lang), getMainMenu(lang));
     }
 
+    await deleteMessagesByType(ctx, ctx.chat.id, `credentials_prompt_${sub.id}`);
+
     // Check if it is "renewing" and waiting for key release
     if (sub.status === 'renewing') {
       // We must check if the key is usable in the database first.
       // If the worker has not marked it as usable (meaning upgrader.cc is still processing the release), we reject credentials.
       if (sub.upgrader_keys && sub.upgrader_keys.status !== 'usable') {
-        return ctx.reply(t('replace_key_not_ready', lang));
+        const sentMsg = await ctx.reply(t('replace_key_not_ready', lang));
+        await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
+        return;
       }
     }
 
@@ -1425,7 +1514,9 @@ bot.on('text', async (ctx) => {
           .update({ status: 'failed' })
           .eq('id', sub.id);
 
-        return ctx.reply(t('key_delay_text', lang), getMainMenu(lang));
+        const sentMsg = await ctx.reply(t('key_delay_text', lang), getMainMenu(lang));
+        await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
+        return;
       }
       
       keyObj = freshKeys[0];
@@ -1455,7 +1546,8 @@ bot.on('text', async (ctx) => {
         })
         .eq('id', keyObj.id);
 
-      await ctx.reply(t('upgrade_process_running', lang), getMainMenu(lang));
+      const sentMsg = await ctx.reply(t('upgrade_process_running', lang), getMainMenu(lang));
+      await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
     } else {
       // Failed immediately!
       // Log to system logs
@@ -1492,20 +1584,25 @@ bot.on('text', async (ctx) => {
         .eq('id', sub.id);
 
       if (isCredentialError) {
-        await ctx.reply(t('upgrade_failed_credentials', lang));
+        const sentMsg = await ctx.reply(t('upgrade_failed_credentials', lang));
+        await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `credentials_prompt_${sub.id}`);
       } else if (isFamilyLimitError) {
-        await ctx.reply(t('upgrade_failed_family_limit', lang));
+        const sentMsg = await ctx.reply(t('upgrade_failed_family_limit', lang));
+        await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `credentials_prompt_${sub.id}`);
       } else {
-        await ctx.reply(t('upgrade_failed_technical', lang, { error: upgradeRes.message }));
+        const sentMsg = await ctx.reply(t('upgrade_failed_technical', lang, { error: upgradeRes.message }));
+        await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
       }
     }
   } catch (err) {
     console.error(err);
     try {
       const user = await getOrCreateUser(ctx);
-      ctx.reply(t('system_error', user.language || 'en'));
+      const sentMsg = await ctx.reply(t('system_error', user.language || 'en'));
+      await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
     } catch (e) {
-      ctx.reply(t('system_error', 'en'));
+      const sentMsg = await ctx.reply(t('system_error', 'en'));
+      await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
     }
   }
 });

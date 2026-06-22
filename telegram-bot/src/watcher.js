@@ -5,6 +5,7 @@ const { checkPayment } = require('./blockchain');
 const { renewAccount, getKeyInfo } = require('./upgrader');
 const { t } = require('./locales');
 const { incrementCouponUses } = require('./coupons');
+const { registerMessageForDeletion, deleteMessagesByType, cleanupExpiredMessages } = require('./cleanup');
 
 // Initialize with bot instance for sending messages
 let telegramBot = null;
@@ -16,10 +17,13 @@ function setBotInstance(bot) {
 /**
  * Send message to user via Telegram
  */
-async function notifyUser(telegramId, text) {
+async function notifyUser(telegramId, text, type = 'status_alert', deleteAfterMinutes = 10) {
   if (!telegramBot) return;
   try {
-    await telegramBot.telegram.sendMessage(telegramId, text, { parse_mode: 'Markdown' });
+    const sentMsg = await telegramBot.telegram.sendMessage(telegramId, text, { parse_mode: 'Markdown' });
+    if (type) {
+      await registerMessageForDeletion(telegramId, sentMsg.message_id, type, deleteAfterMinutes);
+    }
   } catch (err) {
     console.error(`[WATCHER ERROR] Failed to send notification to user ${telegramId}:`, err.message);
   }
@@ -60,6 +64,11 @@ async function watchPayments() {
         // Set subscription status to cancelled
         await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', inv.sub_id);
         
+        if (telegramBot && telegramId) {
+          await deleteMessagesByType(telegramBot, telegramId, `invoice_prompt_${inv.id}`);
+          await deleteMessagesByType(telegramBot, telegramId, `partial_pay_alert_${inv.id}`);
+        }
+
         if (telegramId) {
           await notifyUser(telegramId, t('notify_invoice_expired', language));
         }
@@ -71,122 +80,162 @@ async function watchPayments() {
         const check = await checkPayment(address, inv.amount_ltc);
 
         if (check.found) {
-           if (check.confirmed) {
-            console.log(`[WATCHER] Payment CONFIRMED for invoice ${inv.id}`);
-            
-            // Check if it is a renewal / extension of an active subscription
-            if (inv.subscriptions && inv.subscriptions.renews_subscription_id) {
-              const parentId = inv.subscriptions.renews_subscription_id;
+          const target = inv.amount_ltc;
+          const received = check.paidAmount || 0;
+
+          if (received >= 0.99 * target) {
+            if (check.confirmed) {
+              console.log(`[WATCHER] Payment CONFIRMED for invoice ${inv.id}`);
               
-              // Query parent subscription
-              const { data: parentSub, error: parentErr } = await supabase
-                .from('subscriptions')
-                .select('*')
-                .eq('id', parentId)
-                .single();
+              if (telegramBot && telegramId) {
+                await deleteMessagesByType(telegramBot, telegramId, `invoice_prompt_${inv.id}`);
+                await deleteMessagesByType(telegramBot, telegramId, `partial_pay_alert_${inv.id}`);
+              }
 
-              if (!parentErr && parentSub && parentSub.status === 'active') {
-                console.log(`[WATCHER] Processing renewal for parent subscription ${parentId}`);
+              // Check if it is a renewal / extension of an active subscription
+              if (inv.subscriptions && inv.subscriptions.renews_subscription_id) {
+                const parentId = inv.subscriptions.renews_subscription_id;
                 
-                // Calculate new expires_at
-                const baseDate = new Date(parentSub.expires_at);
-                const durationMonths = inv.subscriptions.packages?.duration_months || 1;
-                baseDate.setMonth(baseDate.getMonth() + durationMonths);
-                const newExpiresAtStr = baseDate.toISOString();
-
-                // Calculate percentage-based milestones for the extended subscription
-                const activatedAt = new Date(parentSub.activated_at || parentSub.created_at);
-                const totalDur = baseDate - activatedAt;
-                const elapsed = Date.now() - activatedAt;
-                const percent = totalDur > 0 ? elapsed / totalDur : 0;
-
-                const ping_10_sent = percent >= 0.10;
-                const ping_50_sent = percent >= 0.50;
-                const ping_75_sent = percent >= 0.75;
-                const ping_90_sent = percent >= 0.90;
-
-                // Update the new subscription directly to 'active' with parent's details
-                await supabase
+                // Query parent subscription
+                const { data: parentSub, error: parentErr } = await supabase
                   .from('subscriptions')
-                  .update({
-                    status: 'active',
-                    key_id: parentSub.key_id,
-                    spotify_email: parentSub.spotify_email,
-                    spotify_password_encrypted: parentSub.spotify_password_encrypted,
-                    activated_at: parentSub.activated_at || parentSub.created_at,
-                    expires_at: newExpiresAtStr,
-                    ping_10_sent,
-                    ping_50_sent,
-                    ping_75_sent,
-                    ping_90_sent,
-                    updated_at: new Date().toISOString()
-                  })
-                  .eq('id', inv.sub_id);
+                  .select('*')
+                  .eq('id', parentId)
+                  .single();
 
-                // Expire parent subscription and clear its key so the worker won't release it
-                await supabase
-                  .from('subscriptions')
-                  .update({
-                    status: 'expired',
-                    key_id: null,
-                    updated_at: new Date().toISOString()
-                  })
-                  .eq('id', parentSub.id);
-
-                // Update invoice & address status
-                await supabase.from('invoices').update({ status: 'confirmed', tx_hash: check.txHash }).eq('id', inv.id);
-                await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', inv.ltc_address_id);
-
-                if (inv.subscriptions.coupon_id) {
-                  await incrementCouponUses(inv.subscriptions.coupon_id);
-                }
-
-                await supabase.from('system_logs').insert({
-                  level: 'INFO',
-                  component: 'WATCHER',
-                  message: `Subscription ${parentSub.id} successfully renewed/extended by sub ${inv.sub_id}`,
-                  details: { parent_id: parentSub.id, sub_id: inv.sub_id, new_expires_at: newExpiresAtStr }
-                });
-
-                if (telegramId) {
-                  const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
-                  const localeStr = language === 'de' ? 'de-DE' : (language === 'ru' ? 'ru-RU' : 'en-US');
-                  const dateStr = baseDate.toLocaleString(localeStr, dateOptions);
+                if (!parentErr && parentSub && parentSub.status === 'active') {
+                  console.log(`[WATCHER] Processing renewal for parent subscription ${parentId}`);
                   
-                  await notifyUser(telegramId, t('notify_extend_success', language, {
-                    pkgName: inv.subscriptions.packages?.name || '',
-                    date: dateStr
-                  }));
-                }
+                  // Calculate new expires_at
+                  const baseDate = new Date(parentSub.expires_at);
+                  const durationMonths = inv.subscriptions.packages?.duration_months || 1;
+                  baseDate.setMonth(baseDate.getMonth() + durationMonths);
+                  const newExpiresAtStr = baseDate.toISOString();
 
-                continue; // Skip normal activation
+                  // Calculate percentage-based milestones for the extended subscription
+                  const activatedAt = new Date(parentSub.activated_at || parentSub.created_at);
+                  const totalDur = baseDate - activatedAt;
+                  const elapsed = Date.now() - activatedAt;
+                  const percent = totalDur > 0 ? elapsed / totalDur : 0;
+
+                  const ping_10_sent = percent >= 0.10;
+                  const ping_50_sent = percent >= 0.50;
+                  const ping_75_sent = percent >= 0.75;
+                  const ping_90_sent = percent >= 0.90;
+
+                  // Update the new subscription directly to 'active' with parent's details
+                  await supabase
+                    .from('subscriptions')
+                    .update({
+                      status: 'active',
+                      key_id: parentSub.key_id,
+                      spotify_email: parentSub.spotify_email,
+                      spotify_password_encrypted: parentSub.spotify_password_encrypted,
+                      activated_at: parentSub.activated_at || parentSub.created_at,
+                      expires_at: newExpiresAtStr,
+                      ping_10_sent,
+                      ping_50_sent,
+                      ping_75_sent,
+                      ping_90_sent,
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', inv.sub_id);
+
+                  // Expire parent subscription and clear its key so the worker won't release it
+                  await supabase
+                    .from('subscriptions')
+                    .update({
+                      status: 'expired',
+                      key_id: null,
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', parentSub.id);
+
+                  // Update invoice & address status
+                  await supabase.from('invoices').update({ status: 'confirmed', tx_hash: check.txHash, paid_amount_ltc: received }).eq('id', inv.id);
+                  await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', inv.ltc_address_id);
+
+                  if (inv.subscriptions.coupon_id) {
+                    await incrementCouponUses(inv.subscriptions.coupon_id);
+                  }
+
+                  await supabase.from('system_logs').insert({
+                    level: 'INFO',
+                    component: 'WATCHER',
+                    message: `Subscription ${parentSub.id} successfully renewed/extended by sub ${inv.sub_id}`,
+                    details: { parent_id: parentSub.id, sub_id: inv.sub_id, new_expires_at: newExpiresAtStr }
+                  });
+
+                  if (telegramId) {
+                    const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+                    const localeStr = language === 'de' ? 'de-DE' : (language === 'ru' ? 'ru-RU' : 'en-US');
+                    const dateStr = baseDate.toLocaleString(localeStr, dateOptions);
+                    
+                    await notifyUser(telegramId, t('notify_extend_success', language, {
+                      pkgName: inv.subscriptions.packages?.name || '',
+                      date: dateStr
+                    }), 'status_alert', 10);
+                  }
+
+                  continue; // Skip normal activation
+                }
+              }
+
+              // Normal Activation Flow
+              await supabase.from('invoices').update({ status: 'confirmed', tx_hash: check.txHash, paid_amount_ltc: received }).eq('id', inv.id);
+              await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', inv.ltc_address_id);
+              await supabase.from('subscriptions').update({ status: 'activating', updated_at: new Date().toISOString() }).eq('id', inv.sub_id);
+
+              if (inv.subscriptions && inv.subscriptions.coupon_id) {
+                await incrementCouponUses(inv.subscriptions.coupon_id);
+              }
+
+              if (telegramId) {
+                await notifyUser(telegramId, 
+                  t('pay_check_confirmed_success', language, { txHash: check.txHash.substring(0, 16) }),
+                  `credentials_prompt_${inv.sub_id}`,
+                  null // Keep credentials prompt until resolved
+                );
+              }
+            } else if (inv.status === 'unpaid') {
+              // Found in mempool but not confirmed yet (full payment)
+              console.log(`[WATCHER] Payment DETECTED in mempool (full payment) for invoice ${inv.id}`);
+              await supabase.from('invoices').update({ status: 'detected', tx_hash: check.txHash, paid_amount_ltc: received }).eq('id', inv.id);
+
+              if (telegramId) {
+                await notifyUser(telegramId, 
+                  t('pay_check_detected', language, { txHash: check.txHash.substring(0, 16) }),
+                  'status_alert',
+                  10
+                );
               }
             }
-
-            // Normal Activation Flow
-            await supabase.from('invoices').update({ status: 'confirmed', tx_hash: check.txHash }).eq('id', inv.id);
-            await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', inv.ltc_address_id);
-            await supabase.from('subscriptions').update({ status: 'activating', updated_at: new Date().toISOString() }).eq('id', inv.sub_id);
-
-            if (inv.subscriptions && inv.subscriptions.coupon_id) {
-              await incrementCouponUses(inv.subscriptions.coupon_id);
-            }
-
-            if (telegramId) {
-              await notifyUser(telegramId, 
-                t('pay_check_confirmed_success', language, { txHash: check.txHash.substring(0, 16) })
-              );
-            }
-          } else if (inv.status === 'unpaid') {
-            // Found in mempool, status transitions unpaid -> detected
-            console.log(`[WATCHER] Payment DETECTED in mempool for invoice ${inv.id}`);
+          } else {
+            // Underpaid / Partial payment
+            console.log(`[WATCHER] Underpaid detected for invoice ${inv.id}: received ${received} LTC, target ${target} LTC`);
             
-            await supabase.from('invoices').update({ status: 'detected', tx_hash: check.txHash }).eq('id', inv.id);
+            if (inv.paid_amount_ltc !== received) {
+              await supabase
+                .from('invoices')
+                .update({ paid_amount_ltc: received })
+                .eq('id', inv.id);
 
-            if (telegramId) {
-              await notifyUser(telegramId, 
-                t('pay_check_detected', language, { txHash: check.txHash.substring(0, 16) })
-              );
+              if (telegramBot && telegramId) {
+                await deleteMessagesByType(telegramBot, telegramId, `partial_pay_alert_${inv.id}`);
+              }
+
+              const remaining = (target - received).toFixed(8);
+              const msg = t('pay_underpaid', language, {
+                received: received.toFixed(8),
+                target: target.toFixed(8),
+                remaining: remaining,
+                address: address
+              });
+
+              if (telegramBot && telegramId) {
+                const sentMsg = await telegramBot.telegram.sendMessage(telegramId, msg, { parse_mode: 'Markdown' });
+                await registerMessageForDeletion(telegramId, sentMsg.message_id, `partial_pay_alert_${inv.id}`);
+              }
             }
           }
         }
@@ -889,6 +938,16 @@ function startWatcher(botInstance) {
   // Run milestone checks every 5 minutes (300000 ms)
   setInterval(checkSubscriptionMilestones, 300000);
   checkSubscriptionMilestones(); // Run immediately
+
+  // Run bot message cleanup check every 60 seconds (60000 ms)
+  setInterval(() => {
+    if (telegramBot) {
+      cleanupExpiredMessages(telegramBot);
+    }
+  }, 60000);
+  if (telegramBot) {
+    cleanupExpiredMessages(telegramBot);
+  }
 }
 
 module.exports = {
