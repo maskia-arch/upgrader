@@ -75,8 +75,14 @@ async function getOrCreateUser(ctx) {
 // Main menu layout
 const getMainMenu = (lang = 'en') => {
   return Markup.keyboard([
-    [t('menu_book_package', lang), t('menu_my_subscriptions', lang)],
-    [t('menu_support_faq', lang), t('menu_language', lang)]
+    [
+      { text: t('menu_book_package', lang), style: 'success' },
+      { text: t('menu_my_subscriptions', lang), style: 'primary' }
+    ],
+    [
+      { text: t('menu_support_faq', lang), style: 'danger' },
+      { text: t('menu_language', lang), style: 'primary' }
+    ]
   ]).resize();
 };
 
@@ -124,7 +130,7 @@ async function handleShowPackages(ctx) {
       return ctx.reply(t('out_of_stock', lang), {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [Markup.button.callback(t('ping_btn', lang), 'ping_subscribe')]
+          [{ ...Markup.button.callback(t('ping_btn', lang), 'ping_subscribe'), style: 'primary' }]
         ])
       });
     }
@@ -148,10 +154,13 @@ async function handleShowPackages(ctx) {
         : t('packages_duration_multi', lang, { months: pkg.duration_months });
 
       msg += t('packages_price', lang, { duration: durationStr, price: pkg.price_eur.toFixed(2) });
-      buttons.push([Markup.button.callback(
-        t('packages_book_now_btn', lang, { name: pkg.name, price: pkg.price_eur.toFixed(2) }), 
-        `buy_${pkg.id}`
-      )]);
+      buttons.push([{
+        ...Markup.button.callback(
+          t('packages_book_now_btn', lang, { name: pkg.name, price: pkg.price_eur.toFixed(2) }), 
+          `buy_${pkg.id}`
+        ),
+        style: 'success'
+      }]);
     });
 
     await ctx.reply(msg, {
@@ -227,13 +236,13 @@ async function handleShowSubscriptions(ctx) {
       const buttons = [];
       
       if (sub.status === 'pending_payment') {
-        buttons.push([Markup.button.callback(t('subs_details_btn', lang), `pay_details_${sub.id}`)]);
+        buttons.push([{ ...Markup.button.callback(t('subs_details_btn', lang), `pay_details_${sub.id}`), style: 'primary' }]);
       } else if (sub.status === 'active') {
-        buttons.push([Markup.button.callback(t('subs_replace_btn', lang), `replace_ask_${sub.id}`)]);
+        buttons.push([{ ...Markup.button.callback(t('subs_replace_btn', lang), `replace_ask_${sub.id}`), style: 'danger' }]);
       } else if (sub.status === 'activating') {
-        buttons.push([Markup.button.callback(t('subs_enter_credentials_btn', lang), `enter_credentials_${sub.id}`)]);
+        buttons.push([{ ...Markup.button.callback(t('subs_enter_credentials_btn', lang), `enter_credentials_${sub.id}`), style: 'success' }]);
       } else if (sub.status === 'failed') {
-        buttons.push([Markup.button.callback(t('subs_reenter_credentials_btn', lang), `enter_credentials_${sub.id}`)]);
+        buttons.push([{ ...Markup.button.callback(t('subs_reenter_credentials_btn', lang), `enter_credentials_${sub.id}`), style: 'success' }]);
       }
 
       await ctx.reply(subInfo, {
@@ -265,9 +274,9 @@ async function handleShowLanguage(ctx) {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [
-          Markup.button.callback('🇺🇸 English', 'set_lang_en'),
-          Markup.button.callback('🇩🇪 Deutsch', 'set_lang_de'),
-          Markup.button.callback('🇷🇺 Русский', 'set_lang_ru')
+          { ...Markup.button.callback('🇺🇸 English', 'set_lang_en'), style: 'primary' },
+          { ...Markup.button.callback('🇩🇪 Deutsch', 'set_lang_de'), style: 'primary' },
+          { ...Markup.button.callback('🇷🇺 Русский', 'set_lang_ru'), style: 'primary' }
         ]
       ])
     });
@@ -367,8 +376,8 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
     return ctx.reply(t('coupon_ask', lang), {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.callback(t('coupon_enter_btn', lang), `coupon_enter_${sub.id}`)],
-        [Markup.button.callback(t('coupon_skip_btn', lang), `coupon_skip_${sub.id}`)]
+        [{ ...Markup.button.callback(t('coupon_enter_btn', lang), `coupon_enter_${sub.id}`), style: 'primary' }],
+        [{ ...Markup.button.callback(t('coupon_skip_btn', lang), `coupon_skip_${sub.id}`), style: 'success' }]
       ])
     });
 
@@ -396,9 +405,9 @@ async function sendPaymentInvoice(ctx, subId, invoice, address, packageName) {
   });
 
   const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback(t('invoice_qr_btn', lang), `show_qr_${invoice.id}`)],
-    [Markup.button.callback(t('invoice_check_btn', lang), `check_pay_${invoice.id}`)],
-    [Markup.button.callback(t('invoice_cancel_btn', lang), `cancel_pay_${invoice.id}`)]
+    [{ ...Markup.button.callback(t('invoice_qr_btn', lang), `show_qr_${invoice.id}`), style: 'primary' }],
+    [{ ...Markup.button.callback(t('invoice_check_btn', lang), `check_pay_${invoice.id}`), style: 'success' }],
+    [{ ...Markup.button.callback(t('invoice_cancel_btn', lang), `cancel_pay_${invoice.id}`), style: 'danger' }]
   ]);
 
   await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
@@ -1047,10 +1056,13 @@ bot.action(/^renew_menu_(.+)$/, async (ctx) => {
         : t('packages_duration_multi', lang, { months: pkg.duration_months });
 
       msg += t('packages_price', lang, { duration: durationStr, price: pkg.price_eur.toFixed(2) });
-      buttons.push([Markup.button.callback(
-        t('packages_book_now_btn', lang, { name: pkg.name, price: pkg.price_eur.toFixed(2) }), 
-        `renew_pkg_${subId}_${pkg.id}`
-      )]);
+      buttons.push([{
+        ...Markup.button.callback(
+          t('packages_book_now_btn', lang, { name: pkg.name, price: pkg.price_eur.toFixed(2) }), 
+          `renew_pkg_${subId}_${pkg.id}`
+        ),
+        style: 'success'
+      }]);
     });
 
     await ctx.reply(msg, {
@@ -1108,8 +1120,8 @@ bot.action(/^renew_pkg_(.+)_(.+)$/, async (ctx) => {
     return ctx.reply(t('coupon_ask', lang), {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.callback(t('coupon_enter_btn', lang), `coupon_enter_${sub.id}`)],
-        [Markup.button.callback(t('coupon_skip_btn', lang), `coupon_skip_${sub.id}`)]
+        [{ ...Markup.button.callback(t('coupon_enter_btn', lang), `coupon_enter_${sub.id}`), style: 'primary' }],
+        [{ ...Markup.button.callback(t('coupon_skip_btn', lang), `coupon_skip_${sub.id}`), style: 'success' }]
       ])
     });
   } catch (err) {
@@ -1154,8 +1166,8 @@ bot.action(/^replace_ask_(.+)$/, async (ctx) => {
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [Markup.button.callback(t('replace_ask_confirm_btn', lang), `replace_confirm_${subId}`)],
-          [Markup.button.callback(t('replace_ask_cancel_btn', lang), 'cancel_replace')]
+          [{ ...Markup.button.callback(t('replace_ask_confirm_btn', lang), `replace_confirm_${subId}`), style: 'danger' }],
+          [{ ...Markup.button.callback(t('replace_ask_cancel_btn', lang), 'cancel_replace'), style: 'primary' }]
         ])
       }
     );
@@ -1311,8 +1323,8 @@ bot.on('text', async (ctx) => {
         return ctx.reply(t('coupon_invalid', lang), {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
-            [Markup.button.callback(t('coupon_retry_btn', lang), `coupon_enter_${couponSub.id}`)],
-            [Markup.button.callback(t('coupon_skip_btn', lang), `coupon_skip_${couponSub.id}`)]
+            [{ ...Markup.button.callback(t('coupon_retry_btn', lang), `coupon_enter_${couponSub.id}`), style: 'primary' }],
+            [{ ...Markup.button.callback(t('coupon_skip_btn', lang), `coupon_skip_${couponSub.id}`), style: 'success' }]
           ])
         });
       }

@@ -732,11 +732,11 @@ async function checkSubscriptionMilestones() {
               parse_mode: 'Markdown',
               ...Markup.inlineKeyboard([
                 [
-                  Markup.button.callback('1 ⭐', `rate_${sub.id}_1`),
-                  Markup.button.callback('2 ⭐', `rate_${sub.id}_2`),
-                  Markup.button.callback('3 ⭐', `rate_${sub.id}_3`),
-                  Markup.button.callback('4 ⭐', `rate_${sub.id}_4`),
-                  Markup.button.callback('5 ⭐', `rate_${sub.id}_5`)
+                  { ...Markup.button.callback('1 ⭐', `rate_${sub.id}_1`), style: 'danger' },
+                  { ...Markup.button.callback('2 ⭐', `rate_${sub.id}_2`), style: 'danger' },
+                  { ...Markup.button.callback('3 ⭐', `rate_${sub.id}_3`), style: 'primary' },
+                  { ...Markup.button.callback('4 ⭐', `rate_${sub.id}_4`), style: 'success' },
+                  { ...Markup.button.callback('5 ⭐', `rate_${sub.id}_5`), style: 'success' }
                 ]
               ])
             }
@@ -763,7 +763,7 @@ async function checkSubscriptionMilestones() {
             {
               parse_mode: 'Markdown',
               ...Markup.inlineKeyboard([
-                [Markup.button.callback(t('renew_btn', language), `renew_menu_${sub.id}`)]
+                [{ ...Markup.button.callback(t('renew_btn', language), `renew_menu_${sub.id}`), style: 'success' }]
               ])
             }
           );
@@ -789,7 +789,7 @@ async function checkSubscriptionMilestones() {
             {
               parse_mode: 'Markdown',
               ...Markup.inlineKeyboard([
-                [Markup.button.callback(t('renew_btn', language), `renew_menu_${sub.id}`)]
+                [{ ...Markup.button.callback(t('renew_btn', language), `renew_menu_${sub.id}`), style: 'success' }]
               ])
             }
           );
@@ -832,7 +832,7 @@ async function checkSubscriptionMilestones() {
             {
               parse_mode: 'Markdown',
               ...Markup.inlineKeyboard([
-                [Markup.button.callback(t('renew_btn', language), `renew_menu_${sub.id}`)]
+                [{ ...Markup.button.callback(t('renew_btn', language), `renew_menu_${sub.id}`), style: 'success' }]
               ])
             }
           );
