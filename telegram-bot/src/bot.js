@@ -10,6 +10,11 @@ const { registerMessageForDeletion, deleteMessagesByType } = require('./cleanup'
 
 const bot = new Telegraf(config.telegramToken);
 
+// Catch Telegraf runtime update errors to prevent unhandled rejection crashes
+bot.catch((err, ctx) => {
+  console.error(`[TELEGRAF ERROR] Error occurred for update ${ctx?.update?.update_id}:`, err);
+});
+
 // Helper: Get or create user in database
 async function getOrCreateUser(ctx) {
   const telegramId = ctx.from.id;
@@ -860,8 +865,6 @@ bot.action(/^check_pay_(.+)$/, async (ctx) => {
     const user = await getOrCreateUser(ctx);
     const lang = user.language || 'en';
 
-    await ctx.answerCbQuery();
-    
     const { data: invoice, error } = await supabase
       .from('invoices')
       .select('*, ltc_addresses(ltc_address), subscriptions(coupon_id)')
@@ -869,10 +872,28 @@ bot.action(/^check_pay_(.+)$/, async (ctx) => {
       .single();
 
     if (error || !invoice) {
-      const sentMsg = await ctx.reply(t('pay_check_invoice_not_found', lang));
-      await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
+      await ctx.answerCbQuery(t('pay_check_invoice_not_found', lang), { show_alert: true });
+      await ctx.deleteMessage().catch(() => {});
       return;
     }
+
+    if (invoice.status === 'expired' || new Date(invoice.expires_at) < new Date()) {
+      if (invoice.status === 'unpaid' || invoice.status === 'detected') {
+        await supabase.from('invoices').update({ status: 'expired' }).eq('id', invoiceId);
+        await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', invoice.ltc_address_id);
+        await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', invoice.sub_id);
+      }
+
+      await ctx.answerCbQuery(t('pay_check_expired', lang), { show_alert: true });
+      await ctx.deleteMessage().catch(() => {});
+
+      await deleteMessagesByType(ctx, ctx.chat.id, `invoice_prompt_${invoiceId}`);
+      await deleteMessagesByType(ctx, ctx.chat.id, `partial_pay_alert_${invoiceId}`);
+      await deleteMessagesByType(ctx, ctx.chat.id, `invoice_warning_${invoiceId}`);
+      return;
+    }
+
+    await ctx.answerCbQuery();
 
     if (invoice.status === 'confirmed') {
       const sentMsg = await ctx.reply(t('pay_check_confirmed', lang));

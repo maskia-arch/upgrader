@@ -33,7 +33,14 @@ async function notifyUser(telegramId, text, type = 'status_alert', deleteAfterMi
  * 1. Blockchain Payment Watcher Loop
  * Scans all unpaid or detected invoices, verifies on-chain transaction matching target LTC amounts.
  */
+let isCheckingPayments = false;
+
 async function watchPayments() {
+  if (isCheckingPayments) {
+    console.log('[WATCHER] watchPayments is already running. Skipping this cycle.');
+    return;
+  }
+  isCheckingPayments = true;
   console.log('[WATCHER] Checking pending invoices...');
   try {
     const { data: invoices, error } = await supabase
@@ -47,77 +54,83 @@ async function watchPayments() {
     const now = new Date();
 
     for (const inv of invoices) {
-      // Delay check to stay within API limits of free block explorers
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      const telegramId = inv.subscriptions?.users?.telegram_id;
-      const language = inv.subscriptions?.users?.language || 'en';
-      const address = inv.ltc_addresses?.ltc_address;
-      
-      // Handle Expiration
-      if (new Date(inv.expires_at) < now) {
-        console.log(`[WATCHER] Invoice ${inv.id} expired.`);
-        // Update Invoice
-        await supabase.from('invoices').update({ status: 'expired' }).eq('id', inv.id);
-        // Release address
-        await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', inv.ltc_address_id);
-        // Set subscription status to cancelled
-        await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', inv.sub_id);
+      try {
+        const telegramId = inv.subscriptions?.users?.telegram_id;
+        const language = inv.subscriptions?.users?.language || 'en';
+        const address = inv.ltc_addresses?.ltc_address;
         
-        if (telegramBot && telegramId) {
-          await deleteMessagesByType(telegramBot, telegramId, `invoice_prompt_${inv.id}`);
-          await deleteMessagesByType(telegramBot, telegramId, `partial_pay_alert_${inv.id}`);
-          await deleteMessagesByType(telegramBot, telegramId, `invoice_warning_${inv.id}`);
-        }
-
-        if (telegramId) {
-          await notifyUser(telegramId, t('notify_invoice_expired', language));
-        }
-        continue;
-      }
-
-      // Handle warning 10% before expiration (e.g. 1 minute for 10-min checkout, 4 minutes for 40-min checkout)
-      const timeRemainingMs = new Date(inv.expires_at) - now;
-      const totalDurationMs = new Date(inv.expires_at) - new Date(inv.created_at);
-      const warningThresholdMs = totalDurationMs * 0.1;
-      if (inv.status === 'unpaid' && timeRemainingMs <= warningThresholdMs && timeRemainingMs > 0 && !inv.warning_10_sent) {
-        const minutesRemaining = Math.ceil(timeRemainingMs / (60 * 1000));
-        console.log(`[WATCHER] Invoice ${inv.id} is within warning threshold (${minutesRemaining} minutes remaining).`);
-        try {
-          const pkgName = inv.subscriptions?.packages?.name || '';
-          const timeFormatted = new Date(inv.expires_at).toLocaleTimeString(language === 'de' ? 'de-DE' : language === 'ru' ? 'ru-RU' : 'en-US', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+        // Handle Expiration
+        if (new Date(inv.expires_at) < now) {
+          console.log(`[WATCHER] Invoice ${inv.id} expired.`);
+          // Update Invoice
+          await supabase.from('invoices').update({ status: 'expired' }).eq('id', inv.id);
+          // Release address
+          await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', inv.ltc_address_id);
+          // Set subscription status to cancelled
+          await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', inv.sub_id);
           
-          const warningText = t('invoice_warning_10', language, {
-            name: pkgName,
-            time: timeFormatted,
-            minutes: minutesRemaining
-          });
-
           if (telegramBot && telegramId) {
-            const warningKeyboard = Markup.inlineKeyboard([
-              [{ ...Markup.button.callback(t('invoice_extend_btn', language), `extend_pay_${inv.id}`), style: 'primary' }]
-            ]);
-            
-            const sentMsg = await telegramBot.telegram.sendMessage(telegramId, warningText, {
-              parse_mode: 'Markdown',
-              ...warningKeyboard
-            });
-            
-            await registerMessageForDeletion(telegramId, sentMsg.message_id, `invoice_warning_${inv.id}`);
+            await deleteMessagesByType(telegramBot, telegramId, `invoice_prompt_${inv.id}`);
+            await deleteMessagesByType(telegramBot, telegramId, `partial_pay_alert_${inv.id}`);
+            await deleteMessagesByType(telegramBot, telegramId, `invoice_warning_${inv.id}`);
           }
 
-          await supabase
-            .from('invoices')
-            .update({ warning_10_sent: true })
-            .eq('id', inv.id);
-
-        } catch (sendErr) {
-          console.error(`[WATCHER ERROR] Failed to send 10-minute warning to user ${telegramId}:`, sendErr.message);
+          if (telegramId) {
+            await notifyUser(telegramId, t('notify_invoice_expired', language));
+          }
+          continue;
         }
-      }
 
-      // Check blockchain
-      try {
+        // Handle warning 10% before expiration (e.g. 3 minutes for 30-min checkout, 6 minutes for 60-min checkout)
+        const timeRemainingMs = new Date(inv.expires_at) - now;
+        const totalDurationMs = new Date(inv.expires_at) - new Date(inv.created_at);
+        const warningThresholdMs = totalDurationMs * 0.1;
+        if (inv.status === 'unpaid' && timeRemainingMs <= warningThresholdMs && timeRemainingMs > 0 && !inv.warning_10_sent) {
+          const minutesRemaining = Math.ceil(timeRemainingMs / (60 * 1000));
+          console.log(`[WATCHER] Invoice ${inv.id} is within warning threshold (${minutesRemaining} minutes remaining).`);
+          try {
+            const pkgName = inv.subscriptions?.packages?.name || '';
+            const timeFormatted = new Date(inv.expires_at).toLocaleTimeString(language === 'de' ? 'de-DE' : language === 'ru' ? 'ru-RU' : 'en-US', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+            
+            const warningKey = inv.is_extended ? 'invoice_warning_10_extended' : 'invoice_warning_10';
+            const warningText = t(warningKey, language, {
+              name: pkgName,
+              time: timeFormatted,
+              minutes: minutesRemaining
+            });
+
+            if (telegramBot && telegramId) {
+              let sentMsg;
+              if (inv.is_extended) {
+                sentMsg = await telegramBot.telegram.sendMessage(telegramId, warningText, {
+                  parse_mode: 'Markdown'
+                });
+              } else {
+                const warningKeyboard = Markup.inlineKeyboard([
+                  [{ ...Markup.button.callback(t('invoice_extend_btn', language), `extend_pay_${inv.id}`), style: 'primary' }]
+                ]);
+                sentMsg = await telegramBot.telegram.sendMessage(telegramId, warningText, {
+                  parse_mode: 'Markdown',
+                  ...warningKeyboard
+                });
+              }
+              
+              await registerMessageForDeletion(telegramId, sentMsg.message_id, `invoice_warning_${inv.id}`);
+            }
+
+            await supabase
+              .from('invoices')
+              .update({ warning_10_sent: true })
+              .eq('id', inv.id);
+
+          } catch (sendErr) {
+            console.error(`[WATCHER ERROR] Failed to send warning to user ${telegramId}:`, sendErr.message);
+          }
+        }
+
+        // Check blockchain - delay check to stay within API limits of free block explorers
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
         const check = await checkPayment(address, inv.amount_ltc);
 
         if (check.found) {
@@ -286,11 +299,13 @@ async function watchPayments() {
           }
         }
       } catch (err) {
-        console.error(`[WATCHER ERROR] Failed checking invoice ${inv.id}:`, err.message);
+        console.error(`[WATCHER ERROR] Failed checking/processing invoice ${inv.id}:`, err.message);
       }
     }
   } catch (err) {
     console.error('[WATCHER ERROR] Error in watchPayments loop:', err.message);
+  } finally {
+    isCheckingPayments = false;
   }
 }
 
@@ -953,8 +968,8 @@ function startWatcher(botInstance) {
   setBotInstance(botInstance);
   console.log('[WATCHER] Background daemon and workers started.');
 
-  // Run payment checks every 2 minutes (120000 ms)
-  setInterval(watchPayments, 120000);
+  // Run payment checks every 30 seconds (30000 ms)
+  setInterval(watchPayments, 30000);
   watchPayments(); // Run immediately
 
   // Run active upgrades checks every 2 minutes (120000 ms)

@@ -1,6 +1,15 @@
 const { bot } = require('./bot');
 const { startWatcher } = require('./watcher');
 
+// Register global error handlers to prevent transient crashes in production
+process.on('uncaughtException', (err) => {
+  console.error('[SYSTEM CRITICAL] Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[SYSTEM CRITICAL] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 async function main() {
   console.log('[SYSTEM] Starting Spotify Premium Upgrade Bot...');
 
@@ -20,7 +29,7 @@ async function main() {
     console.log('[BOT] Telegram Bot successfully started.');
   } catch (error) {
     console.error('[BOT ERROR] Failed to start Telegram Bot:', error.message);
-    process.exit(1);
+    console.log('[BOT] Continuing startup to ensure background watcher runs.');
   }
 
   // Start Background Watcher & Workers
