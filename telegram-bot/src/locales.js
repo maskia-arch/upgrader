@@ -176,7 +176,7 @@ const locales = {
       `\`Email:Password\`\n\n` +
       `e.g.: \`newaccount@web.com:NewPassword123\``,
     notify_invoice_expired: '❌ *Payment window expired!*\n\nThe reservation of the Litecoin address for your order has expired. Please create a new booking if needed.',
-    invoice_warning_10: '⚠️ *Warning:* Your Litecoin payment reservation for *{name}* will expire in 10 minutes (at {time} CET/CEST).\n\nIf you need more time, you can extend the reservation once by 30 minutes using the button below.',
+    invoice_warning_10: '⚠️ *Warning:* Your Litecoin payment reservation for *{name}* will expire soon (in {minutes} minutes, at {time} CET/CEST).\n\nIf you need more time, you can extend the reservation once by 30 minutes using the button below.',
     invoice_extend_btn: '⏱️ Extend by 30 min',
     invoice_extend_success: '✅ *Reservation extended!* Your payment reservation has been extended by 30 minutes.',
     invoice_extend_already: '⚠️ You have already extended this reservation once.',
@@ -367,7 +367,7 @@ const locales = {
       `\`E-Mail:Passwort\`\n\n` +
       `z.B.: \`neueraccount@web.de:NeuesPasswort123\``,
     notify_invoice_expired: '❌ *Zahlungszeitraum abgelaufen!*\n\nDie Reservierung der Litecoin-Adresse für deine Bestellung ist abgelaufen. Bitte erstelle bei Bedarf eine neue Buchung.',
-    invoice_warning_10: '⚠️ *Achtung:* Deine Litecoin-Zahlungsreservierung für *{name}* läuft in 10 Minuten ab (um {time} Uhr MEZ/MESZ).\n\nFalls du mehr Zeit benötigst, kannst du die Reservierung einmalig um 30 Minuten über den Button unten verlängern.',
+    invoice_warning_10: '⚠️ *Achtung:* Deine Litecoin-Zahlungsreservierung für *{name}* läuft in Kürze ab (in {minutes} Min., um {time} Uhr MEZ/MESZ).\n\nFalls du mehr Zeit benötigst, kannst du die Reservierung einmalig um 30 Minuten über den Button unten verlängern.',
     invoice_extend_btn: '⏱️ Um 30 Min verlängern',
     invoice_extend_success: '✅ *Reservierung verlängert!* Deine Zahlungsreservierung wurde um 30 Minuten verlängert.',
     invoice_extend_already: '⚠️ Du hast diese Reservierung bereits einmal verlängert.',
@@ -560,7 +560,7 @@ const locales = {
       `\`Email:Пароль\`\n\n` +
       `например: \`newaccount@web.com:NewPassword123\``,
     notify_invoice_expired: '❌ *Время оплаты истекло!*\n\nРезервирование адреса Litecoin для вашего заказа истекло. Пожалуйста, создайте новый заказ, если это необходимо.',
-    invoice_warning_10: '⚠️ *Внимание:* Ваше бронирование адреса для оплаты Litecoin для *{name}* истечет через 10 минут (в {time} CET/CEST).\n\nЕсли вам нужно больше времени, вы можете продлить бронирование один раз на 30 минут с помощью кнопки ниже.',
+    invoice_warning_10: '⚠️ *Внимание:* Ваше бронирование адреса для оплаты Litecoin для *{name}* скоро истечет (через {minutes} мин, в {time} CET/CEST).\n\nЕсли вам нужно больше времени, вы можете продлить бронирование один раз на 30 минут с помощью кнопки ниже.',
     invoice_extend_btn: '⏱️ Продлить на 30 мин',
     invoice_extend_success: '✅ *Бронирование продлено!* Ваше бронирование оплаты продлено на 30 минут.',
     invoice_extend_already: '⚠️ Вы уже продлевали это бронирование один раз.',

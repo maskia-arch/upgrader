@@ -76,18 +76,21 @@ async function watchPayments() {
         continue;
       }
 
-      // Handle 10-minute warning
+      // Handle warning 10% before expiration (e.g. 1 minute for 10-min checkout, 4 minutes for 40-min checkout)
       const timeRemainingMs = new Date(inv.expires_at) - now;
-      const tenMinutesMs = 10 * 60 * 1000;
-      if (inv.status === 'unpaid' && timeRemainingMs <= tenMinutesMs && timeRemainingMs > 0 && !inv.warning_10_sent) {
-        console.log(`[WATCHER] Invoice ${inv.id} is within 10 minutes of expiration.`);
+      const totalDurationMs = new Date(inv.expires_at) - new Date(inv.created_at);
+      const warningThresholdMs = totalDurationMs * 0.1;
+      if (inv.status === 'unpaid' && timeRemainingMs <= warningThresholdMs && timeRemainingMs > 0 && !inv.warning_10_sent) {
+        const minutesRemaining = Math.ceil(timeRemainingMs / (60 * 1000));
+        console.log(`[WATCHER] Invoice ${inv.id} is within warning threshold (${minutesRemaining} minutes remaining).`);
         try {
           const pkgName = inv.subscriptions?.packages?.name || '';
           const timeFormatted = new Date(inv.expires_at).toLocaleTimeString(language === 'de' ? 'de-DE' : language === 'ru' ? 'ru-RU' : 'en-US', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
           
           const warningText = t('invoice_warning_10', language, {
             name: pkgName,
-            time: timeFormatted
+            time: timeFormatted,
+            minutes: minutesRemaining
           });
 
           if (telegramBot && telegramId) {

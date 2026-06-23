@@ -694,7 +694,7 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
             amount_eur: 0,
             amount_ltc: 0,
             status: 'confirmed',
-            expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+            expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString()
           });
 
         if (coupon) {
@@ -741,7 +741,7 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
         amount_eur: 0,
         amount_ltc: 0,
         status: 'confirmed',
-        expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString()
       });
 
     if (invErr) console.error('[DB ERROR] Failed to create 0-value invoice:', invErr);
@@ -788,7 +788,7 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
       .from('ltc_addresses')
       .update({
         is_reserved: true,
-        reserved_until: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        reserved_until: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
         last_used_at: new Date().toISOString(),
         use_count: selectedAddressObj.use_count + 1
       })
@@ -816,7 +816,7 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
     return ctx.reply(t('buy_order_creation_error', lang));
   }
 
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
   const { data: invoice, error: invError } = await supabase
     .from('invoices')
     .insert({
