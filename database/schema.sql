@@ -102,6 +102,8 @@ CREATE TABLE IF NOT EXISTS invoices (
     tx_hash TEXT,
     status TEXT NOT NULL DEFAULT 'unpaid' CHECK (status IN ('unpaid', 'detected', 'confirmed', 'expired')),
     expires_at TIMESTAMPTZ NOT NULL,
+    warning_10_sent BOOLEAN NOT NULL DEFAULT FALSE,
+    is_extended BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

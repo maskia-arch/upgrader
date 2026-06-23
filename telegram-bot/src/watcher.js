@@ -67,12 +67,50 @@ async function watchPayments() {
         if (telegramBot && telegramId) {
           await deleteMessagesByType(telegramBot, telegramId, `invoice_prompt_${inv.id}`);
           await deleteMessagesByType(telegramBot, telegramId, `partial_pay_alert_${inv.id}`);
+          await deleteMessagesByType(telegramBot, telegramId, `invoice_warning_${inv.id}`);
         }
 
         if (telegramId) {
           await notifyUser(telegramId, t('notify_invoice_expired', language));
         }
         continue;
+      }
+
+      // Handle 10-minute warning
+      const timeRemainingMs = new Date(inv.expires_at) - now;
+      const tenMinutesMs = 10 * 60 * 1000;
+      if (inv.status === 'unpaid' && timeRemainingMs <= tenMinutesMs && timeRemainingMs > 0 && !inv.warning_10_sent) {
+        console.log(`[WATCHER] Invoice ${inv.id} is within 10 minutes of expiration.`);
+        try {
+          const pkgName = inv.subscriptions?.packages?.name || '';
+          const timeFormatted = new Date(inv.expires_at).toLocaleTimeString(language === 'de' ? 'de-DE' : language === 'ru' ? 'ru-RU' : 'en-US');
+          
+          const warningText = t('invoice_warning_10', language, {
+            name: pkgName,
+            time: timeFormatted
+          });
+
+          if (telegramBot && telegramId) {
+            const warningKeyboard = Markup.inlineKeyboard([
+              [{ ...Markup.button.callback(t('invoice_extend_btn', language), `extend_pay_${inv.id}`), style: 'primary' }]
+            ]);
+            
+            const sentMsg = await telegramBot.telegram.sendMessage(telegramId, warningText, {
+              parse_mode: 'Markdown',
+              ...warningKeyboard
+            });
+            
+            await registerMessageForDeletion(telegramId, sentMsg.message_id, `invoice_warning_${inv.id}`);
+          }
+
+          await supabase
+            .from('invoices')
+            .update({ warning_10_sent: true })
+            .eq('id', inv.id);
+
+        } catch (sendErr) {
+          console.error(`[WATCHER ERROR] Failed to send 10-minute warning to user ${telegramId}:`, sendErr.message);
+        }
       }
 
       // Check blockchain
@@ -90,6 +128,7 @@ async function watchPayments() {
               if (telegramBot && telegramId) {
                 await deleteMessagesByType(telegramBot, telegramId, `invoice_prompt_${inv.id}`);
                 await deleteMessagesByType(telegramBot, telegramId, `partial_pay_alert_${inv.id}`);
+                await deleteMessagesByType(telegramBot, telegramId, `invoice_warning_${inv.id}`);
               }
 
               // Check if it is a renewal / extension of an active subscription
@@ -201,6 +240,10 @@ async function watchPayments() {
               // Found in mempool but not confirmed yet (full payment)
               console.log(`[WATCHER] Payment DETECTED in mempool (full payment) for invoice ${inv.id}`);
               await supabase.from('invoices').update({ status: 'detected', tx_hash: check.txHash, paid_amount_ltc: received }).eq('id', inv.id);
+
+              if (telegramBot && telegramId) {
+                await deleteMessagesByType(telegramBot, telegramId, `invoice_warning_${inv.id}`);
+              }
 
               if (telegramId) {
                 await notifyUser(telegramId, 

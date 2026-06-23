@@ -541,6 +541,7 @@ bot.action(/^cancel_pay_(.+)$/, async (ctx) => {
 
     await deleteMessagesByType(ctx, ctx.chat.id, `invoice_prompt_${invoiceId}`);
     await deleteMessagesByType(ctx, ctx.chat.id, `partial_pay_alert_${invoiceId}`);
+    await deleteMessagesByType(ctx, ctx.chat.id, `invoice_warning_${invoiceId}`);
 
     const sentMsg = await ctx.reply(t('pay_cancel_success', lang), getMainMenu(lang));
     await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
@@ -911,6 +912,7 @@ bot.action(/^check_pay_(.+)$/, async (ctx) => {
           // Delete invoice prompt and partial payment alerts immediately
           await deleteMessagesByType(ctx, ctx.chat.id, `invoice_prompt_${invoiceId}`);
           await deleteMessagesByType(ctx, ctx.chat.id, `partial_pay_alert_${invoiceId}`);
+          await deleteMessagesByType(ctx, ctx.chat.id, `invoice_warning_${invoiceId}`);
 
           const sentMsg = await ctx.reply(
             t('pay_check_confirmed_success', lang, { txHash: check.txHash.substring(0, 10) }),
@@ -924,6 +926,8 @@ bot.action(/^check_pay_(.+)$/, async (ctx) => {
             .from('invoices')
             .update({ status: 'detected', tx_hash: check.txHash, paid_amount_ltc: received })
             .eq('id', invoiceId);
+
+          await deleteMessagesByType(ctx, ctx.chat.id, `invoice_warning_${invoiceId}`);
 
           const sentMsg = await ctx.reply(
             t('pay_check_detected', lang, { txHash: check.txHash.substring(0, 16) }),
@@ -959,6 +963,98 @@ bot.action(/^check_pay_(.+)$/, async (ctx) => {
     const user = await getOrCreateUser(ctx);
     const sentMsg = await ctx.reply(t('pay_check_error', user.language || 'en'));
     await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
+  }
+});
+
+// Action: Extend payment reservation by 30 minutes
+bot.action(/^extend_pay_(.+)$/, async (ctx) => {
+  const invoiceId = ctx.match[1];
+  try {
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .select('*, ltc_addresses(ltc_address), subscriptions(package_id, packages(name))')
+      .eq('id', invoiceId)
+      .single();
+
+    if (error || !invoice) {
+      await ctx.answerCbQuery(t('invoice_extend_expired', lang), { show_alert: true });
+      await ctx.deleteMessage().catch(() => {});
+      return;
+    }
+
+    if (invoice.status !== 'unpaid') {
+      await ctx.answerCbQuery(t('invoice_extend_expired', lang), { show_alert: true });
+      await ctx.deleteMessage().catch(() => {});
+      return;
+    }
+
+    if (new Date(invoice.expires_at) < new Date()) {
+      await ctx.answerCbQuery(t('invoice_extend_expired', lang), { show_alert: true });
+      await ctx.deleteMessage().catch(() => {});
+      return;
+    }
+
+    if (invoice.is_extended) {
+      await ctx.answerCbQuery(t('invoice_extend_already', lang), { show_alert: true });
+      await ctx.deleteMessage().catch(() => {});
+      return;
+    }
+
+    // Extend by 30 minutes
+    const newExpiresAt = new Date(new Date(invoice.expires_at).getTime() + 30 * 60 * 1000).toISOString();
+
+    // Update invoice
+    const { error: invErr } = await supabase
+      .from('invoices')
+      .update({
+        expires_at: newExpiresAt,
+        is_extended: true,
+        warning_10_sent: false
+      })
+      .eq('id', invoiceId);
+
+    if (invErr) throw invErr;
+
+    // Update ltc_address reservation
+    await supabase
+      .from('ltc_addresses')
+      .update({
+        reserved_until: newExpiresAt
+      })
+      .eq('id', invoice.ltc_address_id);
+
+    // Update subscription updated_at
+    await supabase
+      .from('subscriptions')
+      .update({
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', invoice.sub_id);
+
+    await ctx.answerCbQuery(t('invoice_extend_success', lang), { show_alert: true });
+    
+    // Delete warning message
+    await ctx.deleteMessage().catch(() => {});
+
+    // Delete old invoice prompt message to prevent duplicate buttons
+    await deleteMessagesByType(ctx, ctx.chat.id, `invoice_prompt_${invoiceId}`);
+
+    // Send new updated invoice
+    await sendPaymentInvoice(
+      ctx,
+      invoice.sub_id,
+      { ...invoice, expires_at: newExpiresAt },
+      invoice.ltc_addresses.ltc_address,
+      invoice.subscriptions.packages.name
+    );
+
+  } catch (err) {
+    console.error('[BOT ERROR] Extend payment failed:', err.message);
+    const user = await getOrCreateUser(ctx);
+    await ctx.answerCbQuery(t('pay_check_error', user.language || 'en'), { show_alert: true });
   }
 });
 
