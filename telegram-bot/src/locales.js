@@ -56,7 +56,7 @@ const locales = {
       `• *LTC Amount:* \`{amountLtc}\` LTC\n` +
       `• *EUR Value:* {amountEur} EUR\n` +
       `• *LTC Address:* \`{address}\`\n\n` +
-      `⏳ The address is reserved until: *{time}*\n` +
+      `⏳ The address is reserved until: *{time} (CET/CEST)*\n` +
       `*IMPORTANT:* Send exactly the requested amount. The invoice expires after the reservation window closes.`,
     invoice_check_btn: '🟢 Check payment now',
     invoice_cancel_btn: '🔴 Cancel payment',
@@ -85,7 +85,7 @@ const locales = {
     buy_order_creation_error: '❌ Error creating order.',
     buy_invoice_creation_error: '❌ Error creating invoice.',
     
-    checkout_blocked: '❌ *Checkout Blocked!*\n\nYou have created too many checkouts recently (limit: 5 checkouts within 60 minutes). You are blocked from creating new checkouts for 6 hours.\n\nTry again after: *{time}*',
+    checkout_blocked: '❌ *Checkout Blocked!*\n\nYou have created too many checkouts recently (limit: 5 checkouts within 60 minutes). You are blocked from creating new checkouts for 6 hours.\n\nTry again after: *{time} (CET/CEST)*',
     checkout_waiting_admin: '❌ *Checkout Blocked!*\n\nYou have been locked out multiple times due to rate limits. Your account is currently suspended pending administrator review.',
     checkout_banned: '❌ *Access Denied!*\n\nYour account has been permanently excluded from creating checkouts.',
     
@@ -159,7 +159,7 @@ const locales = {
     notify_upgrade_success: `🎉 *Spotify Premium is active!*\n\n` +
       `Your Spotify account *{email}* has been successfully upgraded to Premium! 🚀\n\n` +
       `• Package: {pkgName}\n` +
-      `• Expiration date: {date}\n` +
+      `• Expiration date: {date} (CET/CEST)\n` +
       `{compMsg}` +
       `Have fun listening to music! 🎵`,
     notify_upgrade_success_comp: `🎁 *Compensation added:* 48 hours have been added to your remaining runtime!\n`,
@@ -176,7 +176,7 @@ const locales = {
       `\`Email:Password\`\n\n` +
       `e.g.: \`newaccount@web.com:NewPassword123\``,
     notify_invoice_expired: '❌ *Payment window expired!*\n\nThe reservation of the Litecoin address for your order has expired. Please create a new booking if needed.',
-    invoice_warning_10: '⚠️ *Warning:* Your Litecoin payment reservation for *{name}* will expire in 10 minutes (at {time}).\n\nIf you need more time, you can extend the reservation once by 30 minutes using the button below.',
+    invoice_warning_10: '⚠️ *Warning:* Your Litecoin payment reservation for *{name}* will expire in 10 minutes (at {time} CET/CEST).\n\nIf you need more time, you can extend the reservation once by 30 minutes using the button below.',
     invoice_extend_btn: '⏱️ Extend by 30 min',
     invoice_extend_success: '✅ *Reservation extended!* Your payment reservation has been extended by 30 minutes.',
     invoice_extend_already: '⚠️ You have already extended this reservation once.',
@@ -191,7 +191,7 @@ const locales = {
     milestone_50_msg: 'ℹ️ *Your Premium ({pkgName}) runs for {days} more days.*\n\nWould you like to extend your subscription now?',
     milestone_75_msg: '⚠️ *Expiration Warning!*\n\nYour Premium ({pkgName}) expires in *{days} days*.\n\nRenew your package now to ensure uninterrupted service!',
     milestone_90_msg: '🔥 *Last Offer - 10% Discount!*\n\nYour Premium ({pkgName}) expires in *{days} days*.\n\nExtend your subscription within the next 24 hours and get a *10% discount*!\n\nCoupon Code: `{couponCode}`\n(Tap to copy)',
-    notify_extend_success: '✅ *Subscription extended successfully!*\n\nYour Premium ({pkgName}) has been extended until: *{date}*.\n\nYou do not need to re-enter your credentials. Enjoy your music! 🎧',
+    notify_extend_success: '✅ *Subscription extended successfully!*\n\nYour Premium ({pkgName}) has been extended until: *{date} (CET/CEST)*.\n\nYou do not need to re-enter your credentials. Enjoy your music! 🎧',
     renew_btn: '🟢 Renew / Extend Now',
     rating_label: 'Your rating: {stars}'
   },
@@ -249,7 +249,7 @@ const locales = {
       `• *LTC Betrag:* \`{amountLtc}\` LTC\n` +
       `• *EUR Wert:* {amountEur} EUR\n` +
       `• *LTC Adresse:* \`{address}\`\n\n` +
-      `⏳ Die Adresse ist reserviert bis: *{time} Uhr*\n` +
+      `⏳ Die Adresse ist reserviert bis: *{time} Uhr (MEZ/MESZ)*\n` +
       `*WICHTIG:* Sende genau den geforderten Betrag. Nach Ablauf der Reservierung verfällt die Rechnung.`,
     invoice_check_btn: '🟢 Zahlung jetzt prüfen',
     invoice_cancel_btn: '🔴 Zahlung stornieren',
@@ -278,7 +278,7 @@ const locales = {
     buy_order_creation_error: '❌ Fehler beim Erstellen der Bestellung.',
     buy_invoice_creation_error: '❌ Fehler beim Erstellen der Rechnung.',
     
-    checkout_blocked: '❌ *Checkout gesperrt!*\n\nDu hast in letzter Zeit zu viele Checkouts erstellt (Limit: 5 Checkouts innerhalb von 60 Minuten). Du bist für 6 Stunden für neue Checkout-Erstellungen gesperrt.\n\nVersuche es wieder nach: *{time}*',
+    checkout_blocked: '❌ *Checkout gesperrt!*\n\nDu hast in letzter Zeit zu viele Checkouts erstellt (Limit: 5 Checkouts innerhalb von 60 Minuten). Du bist für 6 Stunden für neue Checkout-Erstellungen gesperrt.\n\nVersuche es wieder nach: *{time} (MEZ/MESZ)*',
     checkout_waiting_admin: '❌ *Checkout gesperrt!*\n\nDu wurdest mehrfach wegen API-Limits gesperrt. Dein Konto ist derzeit gesperrt und wartet auf eine Überprüfung durch den Administrator.',
     checkout_banned: '❌ *Zugriff verweigert!*\n\nDein Konto wurde dauerhaft von der Checkout-Erstellung ausgeschlossen.',
     
@@ -350,7 +350,7 @@ const locales = {
     notify_upgrade_success: `🎉 *Spotify Premium ist aktiv!*\n\n` +
       `Dein Spotify-Account *{email}* wurde erfolgreich auf Premium hochgestuft! 🚀\n\n` +
       `• Paket: {pkgName}\n` +
-      `• Ablaufdatum: {date}\n` +
+      `• Ablaufdatum: {date} (MEZ/MESZ)\n` +
       `{compMsg}` +
       `Viel Spaß beim Musik hören! 🎵`,
     notify_upgrade_success_comp: `🎁 *Gutschrift erhalten:* 48 Stunden wurden deiner verbleibenden Laufzeit gutgeschrieben!\n`,
@@ -367,7 +367,7 @@ const locales = {
       `\`E-Mail:Passwort\`\n\n` +
       `z.B.: \`neueraccount@web.de:NeuesPasswort123\``,
     notify_invoice_expired: '❌ *Zahlungszeitraum abgelaufen!*\n\nDie Reservierung der Litecoin-Adresse für deine Bestellung ist abgelaufen. Bitte erstelle bei Bedarf eine neue Buchung.',
-    invoice_warning_10: '⚠️ *Achtung:* Deine Litecoin-Zahlungsreservierung für *{name}* läuft in 10 Minuten ab (um {time}).\n\nFalls du mehr Zeit benötigst, kannst du die Reservierung einmalig um 30 Minuten über den Button unten verlängern.',
+    invoice_warning_10: '⚠️ *Achtung:* Deine Litecoin-Zahlungsreservierung für *{name}* läuft in 10 Minuten ab (um {time} Uhr MEZ/MESZ).\n\nFalls du mehr Zeit benötigst, kannst du die Reservierung einmalig um 30 Minuten über den Button unten verlängern.',
     invoice_extend_btn: '⏱️ Um 30 Min verlängern',
     invoice_extend_success: '✅ *Reservierung verlängert!* Deine Zahlungsreservierung wurde um 30 Minuten verlängert.',
     invoice_extend_already: '⚠️ Du hast diese Reservierung bereits einmal verlängert.',
@@ -382,7 +382,7 @@ const locales = {
     milestone_50_msg: 'ℹ️ *Dein Premium ({pkgName}) läuft noch {days} Tage.*\n\nMöchtest du deine Laufzeit jetzt schon verlängern?',
     milestone_75_msg: '⚠️ *Ablauf-Warnung!*\n\nDein Premium ({pkgName}) läuft in *{days} Tagen* ab.\n\nLade jetzt auf, um eine Unterbrechung zu vermeiden!',
     milestone_90_msg: '🔥 *Letztes Angebot - 10% Rabatt!*\n\nDein Premium ({pkgName}) läuft in *{days} Tagen* ab.\n\nVerlängere deine Laufzeit innerhalb der nächsten 24 Stunden und erhalte *10% Rabatt*!\n\nGutscheincode: `{couponCode}`\n(Zum Kopieren anklicken)',
-    notify_extend_success: '✅ *Abonnement erfolgreich verlängert!*\n\nDein Premium ({pkgName}) wurde verlängert bis: *{date}*.\n\nDu musst deine Zugangsdaten nicht erneut eingeben. Viel Spaß beim Hören! 🎧',
+    notify_extend_success: '✅ *Abonnement erfolgreich verlängert!*\n\nDein Premium ({pkgName}) wurde verlängert bis: *{date} (MEZ/MESZ)*.\n\nDu musst deine Zugangsdaten nicht erneut eingeben. Viel Spaß beim Hören! 🎧',
     renew_btn: '🟢 Jetzt verlängern',
     rating_label: 'Deine Bewertung: {stars}'
   },
@@ -440,7 +440,7 @@ const locales = {
       `• *Сумма LTC:* \`{amountLtc}\` LTC\n` +
       `• *EUR эквивалент:* {amountEur} EUR\n` +
       `• *Адрес LTC:* \`{address}\`\n\n` +
-      `⏳ Адрес зарезервирован до: *{time}*\n` +
+      `⏳ Адрес зарезервирован до: *{time} (CET/CEST)*\n` +
       `*ВАЖНО:* Отправляйте именно указанную сумму. Инвойс истечет после окончания окна резервирования.`,
     invoice_check_btn: '🟢 Проверить оплату',
     invoice_cancel_btn: '🔴 Отменить оплату',
@@ -469,7 +469,7 @@ const locales = {
     buy_order_creation_error: '❌ Ошибка при создании заказа.',
     buy_invoice_creation_error: '❌ Ошибка при создании счета.',
     
-    checkout_blocked: '❌ *Создание заказа заблокировано!*\n\nВы создали слишком много заказов за последнее время (лимит: 5 заказов за 60 минут). Создание новых заказов заблокировано на 6 часов.\n\nПопробуйте снова после: *{time}*',
+    checkout_blocked: '❌ *Создание заказа заблокировано!*\n\nВы создали слишком много заказов за последнее время (лимит: 5 заказов за 60 минут). Создание новых заказов заблокировано на 6 часов.\n\nПопробуйте снова после: *{time} (CET/CEST)*',
     checkout_waiting_admin: '❌ *Создание заказа заблокировано!*\n\nВы были заблокированы несколько раз из-за ограничений частоты. Ваш аккаунт временно заблокирован до решения администратора.',
     checkout_banned: '❌ *Доступ запрещен!*\n\nВаш аккаунт был навсегда исключен из возможности создания заказов.',
     
@@ -543,7 +543,7 @@ const locales = {
     notify_upgrade_success: `🎉 *Spotify Premium активен!*\n\n` +
       `Ваш аккаунт Spotify *{email}* был успешно обновлен до Premium! 🚀\n\n` +
       `• Пакет: {pkgName}\n` +
-      `• Срок действия: {date}\n` +
+      `• Срок действия: {date} (CET/CEST)\n` +
       `{compMsg}` +
       `Приятного прослушивания музыки! 🎵`,
     notify_upgrade_success_comp: `🎁 *Добавлена компенсация:* 48 часов добавлено к сроку действия вашей подписки!\n`,
@@ -560,7 +560,7 @@ const locales = {
       `\`Email:Пароль\`\n\n` +
       `например: \`newaccount@web.com:NewPassword123\``,
     notify_invoice_expired: '❌ *Время оплаты истекло!*\n\nРезервирование адреса Litecoin для вашего заказа истекло. Пожалуйста, создайте новый заказ, если это необходимо.',
-    invoice_warning_10: '⚠️ *Внимание:* Ваше бронирование адреса для оплаты Litecoin для *{name}* истечет через 10 минут (в {time}).\n\nЕсли вам нужно больше времени, вы можете продлить бронирование один раз на 30 минут с помощью кнопки ниже.',
+    invoice_warning_10: '⚠️ *Внимание:* Ваше бронирование адреса для оплаты Litecoin для *{name}* истечет через 10 минут (в {time} CET/CEST).\n\nЕсли вам нужно больше времени, вы можете продлить бронирование один раз на 30 минут с помощью кнопки ниже.',
     invoice_extend_btn: '⏱️ Продлить на 30 мин',
     invoice_extend_success: '✅ *Бронирование продлено!* Ваше бронирование оплаты продлено на 30 минут.',
     invoice_extend_already: '⚠️ Вы уже продлевали это бронирование один раз.',
@@ -575,7 +575,7 @@ const locales = {
     milestone_50_msg: 'ℹ️ *Ваша подписка Premium ({pkgName}) действует еще {days} дн.*\n\nХотите продлить её прямо сейчас?',
     milestone_75_msg: '⚠️ *Предупреждение об окончании!*\n\nВаша подписка ({pkgName}) истекает через *{days} дн.*.\n\nПродлите подписку сейчас, чтобы избежать перебоев!',
     milestone_90_msg: '🔥 *Последний шанс - скидка 10%!*\n\nВаша подписка ({pkgName}) истекает через *{days} дн.*.\n\nПродлите подписку в течение следующих 24 часов и получите *скидку 10%*!\n\nПромокод: `{couponCode}`\n(Нажмите для копирования)',
-    notify_extend_success: '✅ *Подписка успешно продлена!*\n\nВаша подписка ({pkgName}) продлена до: *{date}*.\n\nВам не нужно заново вводить свои учетные данные. Приятного прослушивания! 🎧',
+    notify_extend_success: '✅ *Подписка успешно продлена!*\n\nВаша подписка ({pkgName}) продлена до: *{date} (CET/CEST)*.\n\nВам не нужно заново вводить свои учетные данные. Приятного прослушивания! 🎧',
     renew_btn: '🟢 Продлить прямо сейчас',
     rating_label: 'Ваша оценка: {stars}'
   }

@@ -232,7 +232,7 @@ async function handleShowSubscriptions(ctx) {
       });
 
       if (sub.expires_at) {
-        const formattedDate = new Date(sub.expires_at).toLocaleDateString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US');
+        const formattedDate = new Date(sub.expires_at).toLocaleDateString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', { timeZone: 'Europe/Berlin' });
         subInfo += t('sub_info_expires', lang, { date: formattedDate });
       }
 
@@ -404,7 +404,7 @@ async function sendPaymentInvoice(ctx, subId, invoice, address, packageName) {
   const user = await getOrCreateUser(ctx);
   const lang = user.language || 'en';
   
-  const timeFormatted = new Date(invoice.expires_at).toLocaleTimeString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US');
+  const timeFormatted = new Date(invoice.expires_at).toLocaleTimeString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
   
   const msg = t('invoice_text', lang, {
     name: packageName,
@@ -704,7 +704,7 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
         await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
 
         // Notify user about extension success
-        const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+        const dateOptions = { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
         const localeStr = lang === 'de' ? 'de-DE' : (lang === 'ru' ? 'ru-RU' : 'en-US');
         const dateStr = baseDate.toLocaleString(localeStr, dateOptions);
 
@@ -1078,8 +1078,8 @@ async function checkCheckoutAllowed(ctx, user, lang) {
   // 3. Check if user is currently blocked
   if (user.checkout_blocked_until && new Date(user.checkout_blocked_until) > new Date()) {
     const blockUntil = new Date(user.checkout_blocked_until);
-    const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
-    const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
+    const timeOptions = { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    const dateOptions = { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' };
     const timeStr = blockUntil.toLocaleTimeString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', timeOptions);
     const dateStr = blockUntil.toLocaleDateString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', dateOptions);
     await ctx.reply(t('checkout_blocked', lang, { time: `${dateStr} ${timeStr}` }));
@@ -1119,8 +1119,8 @@ async function checkCheckoutAllowed(ctx, user, lang) {
       details: { user_id: user.id, lockout_count: newLockoutCount, requires_decision: requiresDecision }
     });
 
-    const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
-    const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
+    const timeOptions = { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    const dateOptions = { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' };
     const timeStr = blockedUntil.toLocaleTimeString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', timeOptions);
     const dateStr = blockedUntil.toLocaleDateString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', dateOptions);
     

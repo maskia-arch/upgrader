@@ -83,7 +83,7 @@ async function watchPayments() {
         console.log(`[WATCHER] Invoice ${inv.id} is within 10 minutes of expiration.`);
         try {
           const pkgName = inv.subscriptions?.packages?.name || '';
-          const timeFormatted = new Date(inv.expires_at).toLocaleTimeString(language === 'de' ? 'de-DE' : language === 'ru' ? 'ru-RU' : 'en-US');
+          const timeFormatted = new Date(inv.expires_at).toLocaleTimeString(language === 'de' ? 'de-DE' : language === 'ru' ? 'ru-RU' : 'en-US', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
           
           const warningText = t('invoice_warning_10', language, {
             name: pkgName,
@@ -206,7 +206,7 @@ async function watchPayments() {
                   });
 
                   if (telegramId) {
-                    const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+                    const dateOptions = { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
                     const localeStr = language === 'de' ? 'de-DE' : (language === 'ru' ? 'ru-RU' : 'en-US');
                     const dateStr = baseDate.toLocaleString(localeStr, dateOptions);
                     
@@ -456,7 +456,7 @@ async function watchUpgrades() {
 
           if (telegramId) {
             const language = sub.users?.language || 'en';
-            const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+            const dateOptions = { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
             const localeStr = language === 'de' ? 'de-DE' : (language === 'ru' ? 'ru-RU' : 'en-US');
             const dateStr = expiresAt.toLocaleString(localeStr, dateOptions);
             const compMsg = isReplacement ? t('notify_upgrade_success_comp', language) : '';
