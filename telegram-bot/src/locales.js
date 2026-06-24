@@ -74,6 +74,9 @@ const locales = {
     pay_cancel_success: '❌ Payment cancelled. The subscription has been marked as cancelled.',
     pay_cancel_not_allowed: '⚠️ This invoice cannot be cancelled.',
     pay_cancel_error: '❌ Cancellation failed.',
+    cancel_confirm_prompt: '⚠️ *Cancel Payment?*\n\nAre you sure you want to cancel this payment?',
+    cancel_confirm_yes: '🟢 Yes',
+    cancel_confirm_no: '🔴 No',
     
     pay_details_no_invoice: '⚠️ No active unpaid invoice found for this subscription.',
     pay_details_error: '❌ Error retrieving invoice details.',
@@ -268,6 +271,9 @@ const locales = {
     pay_cancel_success: '❌ Zahlung storniert. Das Abonnement wurde als storniert markiert.',
     pay_cancel_not_allowed: '⚠️ Diese Rechnung kann nicht storniert werden.',
     pay_cancel_error: '❌ Stornierung fehlgeschlagen.',
+    cancel_confirm_prompt: '⚠️ *Zahlung stornieren?*\n\nMöchtest du diese Zahlung wirklich stornieren?',
+    cancel_confirm_yes: '🟢 Ja',
+    cancel_confirm_no: '🔴 Nein',
     
     pay_details_no_invoice: '⚠️ Keine aktive unbezahlte Rechnung für dieses Abonnement gefunden.',
     pay_details_error: '❌ Fehler beim Abrufen der Rechnungsdaten.',
@@ -460,6 +466,9 @@ const locales = {
     pay_cancel_success: '❌ Оплата отменена. Подписка помечена как отмененная.',
     pay_cancel_not_allowed: '⚠️ Этот счет не может быть отменен.',
     pay_cancel_error: '❌ Отмена не удалась.',
+    cancel_confirm_prompt: '⚠️ *Отменить оплату?*\n\nВы действительно хотите отменить этот платеж?',
+    cancel_confirm_yes: '🟢 Да',
+    cancel_confirm_no: '🔴 Нет',
     
     pay_details_no_invoice: '⚠️ Активный неоплаченный счет для этой подписки не найден.',
     pay_details_error: '❌ Ошибка при получении деталей счета.',

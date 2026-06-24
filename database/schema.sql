@@ -155,3 +155,30 @@ CREATE TABLE IF NOT EXISTS bot_messages_cleanup (
     type TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- 11. Atomic Coupon Usage Functions
+CREATE OR REPLACE FUNCTION increment_coupon_uses(coupon_uuid UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_updated INT;
+BEGIN
+  UPDATE coupons
+  SET use_count = use_count + 1
+  WHERE id = coupon_uuid
+    AND (max_uses IS NULL OR use_count < max_uses)
+    AND (expires_at IS NULL OR expires_at > NOW());
+  
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+  
+  RETURN v_updated > 0;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION decrement_coupon_uses(coupon_uuid UUID)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE coupons
+  SET use_count = GREATEST(0, use_count - 1)
+  WHERE id = coupon_uuid;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

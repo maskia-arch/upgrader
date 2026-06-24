@@ -4,7 +4,7 @@ const { Markup } = require('telegraf');
 const { checkPayment } = require('./blockchain');
 const { renewAccount, getKeyInfo } = require('./upgrader');
 const { t } = require('./locales');
-const { incrementCouponUses } = require('./coupons');
+const { incrementCouponUses, decrementCouponUses } = require('./coupons');
 const { registerMessageForDeletion, deleteMessagesByType, cleanupExpiredMessages } = require('./cleanup');
 
 // Initialize with bot instance for sending messages
@@ -68,6 +68,10 @@ async function watchPayments() {
           await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', inv.ltc_address_id);
           // Set subscription status to cancelled
           await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', inv.sub_id);
+          
+          if (inv.subscriptions && inv.subscriptions.coupon_id) {
+            await decrementCouponUses(inv.subscriptions.coupon_id);
+          }
           
           if (telegramBot && telegramId) {
             await deleteMessagesByType(telegramBot, telegramId, `invoice_prompt_${inv.id}`);
@@ -210,9 +214,7 @@ async function watchPayments() {
                   await supabase.from('invoices').update({ status: 'confirmed', tx_hash: check.txHash, paid_amount_ltc: received }).eq('id', inv.id);
                   await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', inv.ltc_address_id);
 
-                  if (inv.subscriptions.coupon_id) {
-                    await incrementCouponUses(inv.subscriptions.coupon_id);
-                  }
+                  // Coupon already incremented at checkout creation
 
                   await supabase.from('system_logs').insert({
                     level: 'INFO',
@@ -241,9 +243,7 @@ async function watchPayments() {
               await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', inv.ltc_address_id);
               await supabase.from('subscriptions').update({ status: 'activating', updated_at: new Date().toISOString() }).eq('id', inv.sub_id);
 
-              if (inv.subscriptions && inv.subscriptions.coupon_id) {
-                await incrementCouponUses(inv.subscriptions.coupon_id);
-              }
+              // Coupon already incremented at checkout creation
 
               if (telegramId) {
                 await notifyUser(telegramId, 

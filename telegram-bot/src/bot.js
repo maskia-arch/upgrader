@@ -1,6 +1,6 @@
 const { Telegraf, Markup } = require('telegraf');
 const config = require('./config');
-const { incrementCouponUses } = require('./coupons');
+const { incrementCouponUses, decrementCouponUses } = require('./coupons');
 const { supabase } = require('./db');
 const { encrypt, decrypt } = require('./crypto');
 const { fetchLtcPrice, checkPayment } = require('./blockchain');
@@ -510,7 +510,7 @@ bot.action(/^show_qr_(.+)$/, async (ctx) => {
   }
 });
 
-// Action: Cancel Payment
+// Action: Cancel Payment (Triggers confirmation prompt)
 bot.action(/^cancel_pay_(.+)$/, async (ctx) => {
   const invoiceId = ctx.match[1];
   try {
@@ -521,6 +521,42 @@ bot.action(/^cancel_pay_(.+)$/, async (ctx) => {
     const { data: invoice, error } = await supabase
       .from('invoices')
       .select('*')
+      .eq('id', invoiceId)
+      .single();
+
+    if (error || !invoice || invoice.status !== 'unpaid') {
+      return ctx.reply(t('pay_cancel_not_allowed', lang));
+    }
+
+    const keyboard = Markup.inlineKeyboard([
+      [
+        { ...Markup.button.callback(t('cancel_confirm_yes', lang), `confirm_cancel_${invoiceId}`), style: 'success' },
+        { ...Markup.button.callback(t('cancel_confirm_no', lang), `keep_pay_${invoiceId}`), style: 'danger' }
+      ]
+    ]);
+
+    await ctx.editMessageText(t('cancel_confirm_prompt', lang), {
+      parse_mode: 'Markdown',
+      ...keyboard
+    });
+  } catch (err) {
+    console.error('[BOT ERROR] Cancel payment trigger error:', err);
+    const user = await getOrCreateUser(ctx);
+    ctx.reply(t('pay_cancel_error', user.language || 'en'));
+  }
+});
+
+// Action: Confirm Cancellation
+bot.action(/^confirm_cancel_(.+)$/, async (ctx) => {
+  const invoiceId = ctx.match[1];
+  try {
+    await ctx.answerCbQuery();
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .select('*, subscriptions(coupon_id)')
       .eq('id', invoiceId)
       .single();
 
@@ -544,6 +580,10 @@ bot.action(/^cancel_pay_(.+)$/, async (ctx) => {
       .update({ status: 'cancelled' })
       .eq('id', invoice.sub_id);
 
+    if (invoice.subscriptions && invoice.subscriptions.coupon_id) {
+      await decrementCouponUses(invoice.subscriptions.coupon_id);
+    }
+
     await deleteMessagesByType(ctx, ctx.chat.id, `invoice_prompt_${invoiceId}`);
     await deleteMessagesByType(ctx, ctx.chat.id, `partial_pay_alert_${invoiceId}`);
     await deleteMessagesByType(ctx, ctx.chat.id, `invoice_warning_${invoiceId}`);
@@ -551,8 +591,52 @@ bot.action(/^cancel_pay_(.+)$/, async (ctx) => {
     const sentMsg = await ctx.reply(t('pay_cancel_success', lang), getMainMenu(lang));
     await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
   } catch (err) {
+    console.error('[BOT ERROR] Confirm cancel error:', err);
     const user = await getOrCreateUser(ctx);
     ctx.reply(t('pay_cancel_error', user.language || 'en'));
+  }
+});
+
+// Action: Keep Payment (Edit back to invoice details)
+bot.action(/^keep_pay_(.+)$/, async (ctx) => {
+  const invoiceId = ctx.match[1];
+  try {
+    await ctx.answerCbQuery();
+    const user = await getOrCreateUser(ctx);
+    const lang = user.language || 'en';
+
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .select('*, ltc_addresses(ltc_address), subscriptions(package_id, packages(name))')
+      .eq('id', invoiceId)
+      .single();
+
+    if (error || !invoice || invoice.status !== 'unpaid') {
+      return ctx.deleteMessage().catch(() => {});
+    }
+
+    const timeFormatted = new Date(invoice.expires_at).toLocaleTimeString(lang === 'de' ? 'de-DE' : lang === 'ru' ? 'ru-RU' : 'en-US', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+    
+    const msg = t('invoice_text', lang, {
+      name: invoice.subscriptions?.packages?.name || '',
+      amountLtc: invoice.amount_ltc.toFixed(8),
+      amountEur: invoice.amount_eur.toFixed(2),
+      address: invoice.ltc_addresses?.ltc_address || '',
+      time: timeFormatted
+    });
+
+    const keyboard = Markup.inlineKeyboard([
+      [{ ...Markup.button.callback(t('invoice_qr_btn', lang), `show_qr_${invoice.id}`), style: 'primary' }],
+      [{ ...Markup.button.callback(t('invoice_check_btn', lang), `check_pay_${invoice.id}`), style: 'success' }],
+      [{ ...Markup.button.callback(t('invoice_cancel_btn', lang), `cancel_pay_${invoice.id}`), style: 'danger' }]
+    ]);
+
+    await ctx.editMessageText(msg, {
+      parse_mode: 'Markdown',
+      ...keyboard
+    });
+  } catch (err) {
+    console.error('[BOT ERROR] Keep payment error:', err);
   }
 });
 
@@ -630,6 +714,17 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
 
   finalPrice = parseFloat(finalPrice.toFixed(2));
 
+  // Atomic coupon increment/reservation check
+  let couponIncremented = false;
+  if (coupon) {
+    const success = await incrementCouponUses(coupon.id);
+    if (!success) {
+      await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+      return ctx.reply(t('coupon_invalid', lang));
+    }
+    couponIncremented = true;
+  }
+
   // 0 EUR invoice (100% discount)
   if (finalPrice <= 0) {
     // Check if it is a renewal / extension of an active subscription
@@ -644,124 +739,144 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
       if (!parentErr && parentSub && parentSub.status === 'active') {
         console.log(`[BOT] Processing free renewal/extension for parent subscription ${parentId}`);
         
-        // Calculate new expires_at
-        const baseDate = new Date(parentSub.expires_at);
-        baseDate.setMonth(baseDate.getMonth() + pkg.duration_months);
-        const newExpiresAtStr = baseDate.toISOString();
+        try {
+          // Calculate new expires_at
+          const baseDate = new Date(parentSub.expires_at);
+          baseDate.setMonth(baseDate.getMonth() + pkg.duration_months);
+          const newExpiresAtStr = baseDate.toISOString();
 
-        // Calculate percentage-based milestones for the extended subscription
-        const activatedAt = new Date(parentSub.activated_at || parentSub.created_at);
-        const totalDur = baseDate - activatedAt;
-        const elapsed = Date.now() - activatedAt;
-        const percent = totalDur > 0 ? elapsed / totalDur : 0;
+          // Calculate percentage-based milestones for the extended subscription
+          const activatedAt = new Date(parentSub.activated_at || parentSub.created_at);
+          const totalDur = baseDate - activatedAt;
+          const elapsed = Date.now() - activatedAt;
+          const percent = totalDur > 0 ? elapsed / totalDur : 0;
 
-        const ping_10_sent = percent >= 0.10;
-        const ping_50_sent = percent >= 0.50;
-        const ping_75_sent = percent >= 0.75;
-        const ping_90_sent = percent >= 0.90;
+          const ping_10_sent = percent >= 0.10;
+          const ping_50_sent = percent >= 0.50;
+          const ping_75_sent = percent >= 0.75;
+          const ping_90_sent = percent >= 0.90;
 
-        // Update the new subscription directly to 'active' with parent's details
-        await supabase
-          .from('subscriptions')
-          .update({
-            status: 'active',
-            key_id: parentSub.key_id,
-            spotify_email: parentSub.spotify_email,
-            spotify_password_encrypted: parentSub.spotify_password_encrypted,
-            activated_at: parentSub.activated_at || parentSub.created_at,
-            expires_at: newExpiresAtStr,
-            ping_10_sent,
-            ping_50_sent,
-            ping_75_sent,
-            ping_90_sent,
-            coupon_id: coupon ? coupon.id : null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', sub.id);
+          // Update the new subscription directly to 'active' with parent's details
+          const { error: newSubErr } = await supabase
+            .from('subscriptions')
+            .update({
+              status: 'active',
+              key_id: parentSub.key_id,
+              spotify_email: parentSub.spotify_email,
+              spotify_password_encrypted: parentSub.spotify_password_encrypted,
+              activated_at: parentSub.activated_at || parentSub.created_at,
+              expires_at: newExpiresAtStr,
+              ping_10_sent,
+              ping_50_sent,
+              ping_75_sent,
+              ping_90_sent,
+              coupon_id: coupon ? coupon.id : null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', sub.id);
 
-        // Expire parent subscription and clear its key so the worker won't release it
-        await supabase
-          .from('subscriptions')
-          .update({
-            status: 'expired',
-            key_id: null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', parentSub.id);
+          if (newSubErr) throw newSubErr;
 
-        // Create confirmed 0-value invoice
-        const dummyAddrId = await getDummyOrFirstAddressId();
-        await supabase
-          .from('invoices')
-          .insert({
-            sub_id: sub.id,
-            ltc_address_id: dummyAddrId,
-            amount_eur: 0,
-            amount_ltc: 0,
-            status: 'confirmed',
-            expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString()
-          });
+          // Expire parent subscription and clear its key so the worker won't release it
+          const { error: parentSubErr } = await supabase
+            .from('subscriptions')
+            .update({
+              status: 'expired',
+              key_id: null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', parentSub.id);
 
-        if (coupon) {
-          await incrementCouponUses(coupon.id);
+          if (parentSubErr) throw parentSubErr;
+
+          // Create confirmed 0-value invoice
+          const dummyAddrId = await getDummyOrFirstAddressId();
+          const { error: invErr } = await supabase
+            .from('invoices')
+            .insert({
+              sub_id: sub.id,
+              ltc_address_id: dummyAddrId,
+              amount_eur: 0,
+              amount_ltc: 0,
+              status: 'confirmed',
+              expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString()
+            });
+
+          if (invErr) throw invErr;
+
+          await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+
+          // Notify user about extension success
+          const dateOptions = { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+          const localeStr = lang === 'de' ? 'de-DE' : (lang === 'ru' ? 'ru-RU' : 'en-US');
+          const dateStr = baseDate.toLocaleString(localeStr, dateOptions);
+
+          const sentMsg = await ctx.reply(t('notify_extend_success', lang, {
+            pkgName: pkg.name || '',
+            date: dateStr
+          }), getMainMenu(lang));
+          await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
+          return; // Return immediately, don't fall through!
+        } catch (dbErr) {
+          console.error('[BOT ERROR] Free renewal database updates failed:', dbErr);
+          if (couponIncremented) {
+            await decrementCouponUses(coupon.id);
+          }
+          await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+          return ctx.reply(t('buy_order_creation_error', lang));
         }
-
-        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
-
-        // Notify user about extension success
-        const dateOptions = { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
-        const localeStr = lang === 'de' ? 'de-DE' : (lang === 'ru' ? 'ru-RU' : 'en-US');
-        const dateStr = baseDate.toLocaleString(localeStr, dateOptions);
-
-        const sentMsg = await ctx.reply(t('notify_extend_success', lang, {
-          pkgName: pkg.name || '',
-          date: dateStr
-        }), getMainMenu(lang));
-        await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
       }
     }
 
     // Normal free activation flow
-    const { error: subUpdateErr } = await supabase
-      .from('subscriptions')
-      .update({
-        status: 'activating',
-        coupon_id: coupon ? coupon.id : null,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', sub.id);
+    try {
+      const { error: subUpdateErr } = await supabase
+        .from('subscriptions')
+        .update({
+          status: 'activating',
+          coupon_id: coupon ? coupon.id : null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', sub.id);
 
-    if (subUpdateErr) throw subUpdateErr;
+      if (subUpdateErr) throw subUpdateErr;
 
-    if (coupon) {
-      await incrementCouponUses(coupon.id);
+      const dummyAddrId = await getDummyOrFirstAddressId();
+      const { error: invErr } = await supabase
+        .from('invoices')
+        .insert({
+          sub_id: sub.id,
+          ltc_address_id: dummyAddrId,
+          amount_eur: 0,
+          amount_ltc: 0,
+          status: 'confirmed',
+          expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString()
+        });
+
+      if (invErr) throw invErr;
+
+      await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+      const sentMsg = await ctx.reply(t('coupon_free_confirmed', lang));
+      await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `credentials_prompt_${sub.id}`);
+      return;
+    } catch (freeErr) {
+      console.error('[BOT ERROR] Free activation failed:', freeErr);
+      if (couponIncremented) {
+        await decrementCouponUses(coupon.id);
+      }
+      await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+      return ctx.reply(t('buy_order_creation_error', lang));
     }
-
-    const dummyAddrId = await getDummyOrFirstAddressId();
-    const { error: invErr } = await supabase
-      .from('invoices')
-      .insert({
-        sub_id: sub.id,
-        ltc_address_id: dummyAddrId,
-        amount_eur: 0,
-        amount_ltc: 0,
-        status: 'confirmed',
-        expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString()
-      });
-
-    if (invErr) console.error('[DB ERROR] Failed to create 0-value invoice:', invErr);
-
-    await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
-    const sentMsg = await ctx.reply(t('coupon_free_confirmed', lang));
-    await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, `credentials_prompt_${sub.id}`);
-    return;
   }
 
   let ltcRate;
   try {
     ltcRate = await fetchLtcPrice();
   } catch (e) {
-    await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
+    if (couponIncremented) {
+      await decrementCouponUses(coupon.id);
+    }
+    await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
     return ctx.reply(t('buy_rate_api_error', lang));
   }
 
@@ -783,7 +898,10 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
       .limit(1);
 
     if (fallbackError || !fallbackAddrs || fallbackAddrs.length === 0) {
-      await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
+      if (couponIncremented) {
+        await decrementCouponUses(coupon.id);
+      }
+      await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
       return ctx.reply(t('buy_no_address_free', lang));
     }
 
@@ -800,7 +918,10 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
       .eq('id', selectedAddressObj.id);
 
     if (updateError) {
-      await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
+      if (couponIncremented) {
+        await decrementCouponUses(coupon.id);
+      }
+      await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
       return ctx.reply(t('buy_reservation_error', lang));
     }
   }
@@ -816,8 +937,11 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
 
   if (subUpdateErr) {
     console.error(subUpdateErr);
+    if (couponIncremented) {
+      await decrementCouponUses(coupon.id);
+    }
     await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', selectedAddressObj.id);
-    await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
+    await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
     return ctx.reply(t('buy_order_creation_error', lang));
   }
 
@@ -837,13 +961,16 @@ async function proceedWithPayment(ctx, sub, pkg, coupon, statusMsg, lang, user) 
 
   if (invError || !invoice) {
     console.error(invError);
+    if (couponIncremented) {
+      await decrementCouponUses(coupon.id);
+    }
     await supabase.from('subscriptions').update({ status: 'waiting_coupon' }).eq('id', sub.id);
     await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', selectedAddressObj.id);
-    await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
+    await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
     return ctx.reply(t('buy_invoice_creation_error', lang));
   }
 
-  await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
+  await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
 
   if (coupon) {
     const sentMsg = await ctx.reply(t('coupon_applied_success', lang, { discount: discountDisplay }), { parse_mode: 'Markdown' });
@@ -882,6 +1009,9 @@ bot.action(/^check_pay_(.+)$/, async (ctx) => {
         await supabase.from('invoices').update({ status: 'expired' }).eq('id', invoiceId);
         await supabase.from('ltc_addresses').update({ is_reserved: false, reserved_until: null }).eq('id', invoice.ltc_address_id);
         await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', invoice.sub_id);
+        if (invoice.subscriptions && invoice.subscriptions.coupon_id) {
+          await decrementCouponUses(invoice.subscriptions.coupon_id);
+        }
       }
 
       await ctx.answerCbQuery();
@@ -929,9 +1059,7 @@ bot.action(/^check_pay_(.+)$/, async (ctx) => {
             .update({ status: 'activating' })
             .eq('id', invoice.sub_id);
 
-          if (invoice.subscriptions && invoice.subscriptions.coupon_id) {
-            await incrementCouponUses(invoice.subscriptions.coupon_id);
-          }
+          // Coupon was already incremented at checkout creation, no need to increment again.
 
           // Delete invoice prompt and partial payment alerts immediately
           await deleteMessagesByType(ctx, ctx.chat.id, `invoice_prompt_${invoiceId}`);
