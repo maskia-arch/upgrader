@@ -23,17 +23,17 @@ async function main() {
     console.log(`[SYSTEM] Port binder listening on port ${dummyPort} (Render compatibility)`);
   });
 
+  // Start Background Watcher & Workers (runs independently of bot polling launch)
+  startWatcher(bot);
+
   // Start Telegraf Bot
   try {
     await bot.launch();
     console.log('[BOT] Telegram Bot successfully started.');
   } catch (error) {
     console.error('[BOT ERROR] Failed to start Telegram Bot:', error.message);
-    console.log('[BOT] Continuing startup to ensure background watcher runs.');
+    console.log('[BOT] Polling failed, but background watcher is active.');
   }
-
-  // Start Background Watcher & Workers
-  startWatcher(bot);
 
   // Enable graceful stop
   const shutdown = (signal) => {

@@ -884,8 +884,11 @@ bot.action(/^check_pay_(.+)$/, async (ctx) => {
         await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', invoice.sub_id);
       }
 
-      await ctx.answerCbQuery(t('pay_check_expired', lang), { show_alert: true });
+      await ctx.answerCbQuery();
       await ctx.deleteMessage().catch(() => {});
+
+      const sentMsg = await ctx.reply(t('notify_invoice_expired', lang));
+      await registerMessageForDeletion(ctx.chat.id, sentMsg.message_id, 'status_alert', 10);
 
       await deleteMessagesByType(ctx, ctx.chat.id, `invoice_prompt_${invoiceId}`);
       await deleteMessagesByType(ctx, ctx.chat.id, `partial_pay_alert_${invoiceId}`);
