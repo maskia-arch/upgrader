@@ -46,7 +46,7 @@ const locales = {
       `*3. How long does the activation take?*\n` +
       `Litecoin payments are activated after the first confirmation on the blockchain (usually 2–10 minutes). The subsequent automated upgrade process takes about 5–30 minutes.\n\n` +
       `*4. Are there rules for requesting replacements?*\n` +
-      `⚠️ *Yes.* Please only request a replacement if your Premium has actually stopped working. Falsely requesting a replacement (e.g. if Premium is still active) will result in a system-side *Flag (Warning)*. Upon receiving *3 Flags*, replacement requests for your key will be permanently blocked.\n\n` +
+      `⚠️ *Yes.* Please only request a replacement if your Premium has actually stopped working. Falsely requesting a replacement (e.g. if Premium is still active) will result in a system-side *Flag (Warning)*. Upon receiving *3 Flags*, replacement requests for your slot will be permanently blocked.\n\n` +
       `*5. How to contact Support?*\n` +
       `For any issues with your upgrade, please contact our support admin at @redo666redo. Please provide your Order ID or Telegram ID.`,
       
@@ -103,9 +103,9 @@ const locales = {
     
     replace_ask_text: `⚠️ *Request replacement for this subscription?*\n\n` +
       `Only use this option if you were kicked out of the family plan early or your Premium stopped working.\n\n` +
-      `*⚠️ IMPORTANT NOTICE:* Falsely requesting a replacement (e.g. if Premium is still active on your account) will result in a system-side Flag (Warning). At 3 Flags, you will be blocked from future replacement requests for this key!\n\n` +
+      `*⚠️ IMPORTANT NOTICE:* Falsely requesting a replacement (e.g. if Premium is still active on your account) will result in a system-side Flag (Warning). At 3 Flags, you will be blocked from future replacement requests for this slot!\n\n` +
       `*Process:*\n` +
-      `1. Your key will be reset.\n` +
+      `1. Your slot will be reset.\n` +
       `2. You will be prompted to enter login details for a *NEW* Spotify account.\n\n` +
       `*Compensation:*\n` +
       `As compensation for the interruption, we automatically add *48 hours extra* to your remaining runtime upon successful upgrade! 🎁\n\n` +
@@ -116,16 +116,16 @@ const locales = {
     
     replace_blocked: `❌ *Action blocked!*\n\n` +
       `You have reached the limit of 3 warnings (Flags) due to abusive replacement requests.\n` +
-      `Further replacement requests for this key/account can no longer be processed.`,
+      `Further replacement requests for this slot/account can no longer be processed.`,
     replace_error_still_active: `⚠️ *Replacement failed: Premium still active!*\n\n` +
       `According to the Spotify interface, Premium is still active on your account. You have received a system-side Flag.\n\n` +
       `*Status:* {flags}/3 Flags.\n` +
       `At 3 Flags, you will be blocked from future replacement requests!`,
     replace_confirm_not_active: '⚠️ Only active subscriptions can be reclaimed.',
     replace_started: `♻️ *Replacement process started!*\n\n` +
-      `Your key is being reset. We check the status every 5 minutes. As soon as your slot is freed up, we will send you a notification here so you can enter your new Spotify account details.`,
+      `Your slot is being reset. We check the status every 5 minutes. As soon as your slot is freed up, we will send you a notification here so you can enter your new Spotify account details.`,
     replace_error: '❌ Replacement request failed.',
-    replace_key_not_ready: `⏳ *The key is not ready for use yet.*\n\nUpgrader.cc is releasing the slot. Please wait until you receive a notification from the bot that the key is ready.`,
+    replace_key_not_ready: `⏳ *The upgrade slot is not ready for use yet.*\n\nUpgrader.cc is releasing the slot. Please wait until you receive a notification from the bot that the slot is ready.`,
     
     credentials_prompt: `✏️ *Enter Spotify login credentials*\n\n` +
       `Please send me your Spotify login credentials in the format:\n` +
@@ -137,8 +137,8 @@ const locales = {
     credentials_not_waiting: '❌ Error: This subscription is not currently waiting for credentials.',
     
     key_delay_text: `⚠️ *Upgrade Delay:*\n\n` +
-      `Currently, there are no free upgrade keys available. The admin has been notified and will add new keys or perform your upgrade manually shortly.\n\n` +
-      `Your credentials have been saved. As soon as a key is ready, the upgrade will be processed.`,
+      `Currently, there are no free upgrade slots available. The admin has been notified and will add new slots or perform your upgrade manually shortly.\n\n` +
+      `Your credentials have been saved. As soon as a slot is ready, the upgrade will be processed.`,
     upgrade_process_running: `🔄 *Upgrade process is running!* (Duration: approx. 5–30 minutes)\n\n` +
       `Your credentials have been encrypted and sent to the system.\n` +
       `The upgrade is running in the background. We are checking the status and will send you a notification here once your Premium upgrade is active! 🎧`,
@@ -173,8 +173,8 @@ const locales = {
     notify_expired: `⚠️ *Your Spotify Premium Upgrade has expired!*\n\n` +
       `Your subscription runtime has ended and your account has been removed from the family group.\n\n` +
       `You can book a new upgrade anytime in the main menu using *🛍️ Book Package*!`,
-    notify_replace_ready: `♻️ *Replacement key is ready!*\n\n` +
-      `Your upgrade key has been successfully reset and released.\n\n` +
+    notify_replace_ready: `♻️ *Replacement slot is ready!*\n\n` +
+      `Your upgrade slot has been successfully reset and released.\n\n` +
       `Please create or acquire a *NEW, FRESH Spotify account* (do not use the old one as it is blocked for 12 months!) and send me your new login credentials in the format:\n` +
       `\`Email:Password\`\n\n` +
       `e.g.: \`newaccount@web.com:NewPassword123\``,
@@ -187,8 +187,8 @@ const locales = {
     invoice_extend_expired: '⚠️ This checkout has already expired and cannot be extended.',
     out_of_stock: '🔴 *Temporarily Out of Stock*\n\nWe currently have no upgrade slots available. Please check back later or subscribe to get notified immediately when we restock!',
     ping_btn: '🔔 Ping me when restocked',
-    ping_subscribed: '✅ *Subscribed!*\n\nI will send you a message as soon as upgrades are back in stock.',
-    restock_notification: '🎉 *Upgrades are back in stock!*\n\nWe have new Spotify Premium upgrades available. You can now upgrade your account using /buy.',
+    ping_subscribed: '✅ *Subscribed!*\n\nI will send you a message as soon as upgrade slots are back in stock.',
+    restock_notification: '🎉 *Upgrade slots are back in stock!*\n\nWe have new Spotify Premium upgrade slots available. You can now upgrade your account using /buy.',
     milestone_10_prompt: '⭐ *How satisfied are you with your upgrade for {pkgName} so far?*\n\nPlease rate your experience below:',
     milestone_10_thanks: '✅ *Thank you for your rating!* Your feedback helps us improve our service.',
     milestone_10_already_rated: '⚠️ You have already rated this subscription.',
@@ -243,7 +243,7 @@ const locales = {
       `*3. Wie lange dauert die Freischaltung?*\n` +
       `Litecoin-Zahlungen werden ab der ersten Bestätigung auf der Blockchain freigeschaltet (normalerweise innerhalb von 2–10 Minuten). Das anschließende automatische Upgrade dauert ca. 5–30 Minuten.\n\n` +
       `*4. Gibt es Regeln für das Anfordern von Ersatz?*\n` +
-      `⚠️ *Ja.* Bitte fordere Ersatz nur an, wenn dein Premium tatsächlich nicht mehr funktioniert. Fälschliches Anfordern von Ersatz (z.B. wenn Premium noch aktiv ist) führt zu einem systemseitigen *Flag (Verwarnung)*. Bei *3 Flags* wird die Bearbeitung von Ersatzanfragen für deinen Key dauerhaft gesperrt.\n\n` +
+      `⚠️ *Ja.* Bitte fordere Ersatz nur an, wenn dein Premium tatsächlich nicht mehr funktioniert. Fälschliches Anfordern von Ersatz (z.B. wenn Premium noch aktiv ist) führt zu einem systemseitigen *Flag (Verwarnung)*. Bei *3 Flags* wird die Bearbeitung von Ersatzanfragen für deinen Slot dauerhaft gesperrt.\n\n` +
       `*5. Support anfragen:*\n` +
       `Bei Problemen mit deinem Upgrade wende dich bitte an den Support-Admin unter @redo666redo. Gib dabei bitte deine Bestell-ID oder Telegram-ID an.`,
       
@@ -300,9 +300,9 @@ const locales = {
     
     replace_ask_text: `⚠️ *Ersatz für dieses Abonnement anfragen?*\n\n` +
       `Nutze diese Option nur, wenn du vorzeitig aus der Family geworfen wurdest oder dein Premium nicht mehr funktioniert.\n\n` +
-      `*⚠️ WICHTIGER HINWEIS:* Das fälschliche Anfordern von Ersatz (z.B. wenn Premium auf deinem Account noch aktiv ist) wird systemseitig mit einem Flag (Verwarnung) belegt. Bei 3 Flags wirst du für jegliche zukünftige Ersatzanfragen dieses Keys gesperrt!\n\n` +
+      `*⚠️ WICHTIGER HINWEIS:* Das fälschliche Anfordern von Ersatz (z.B. wenn Premium auf deinem Account noch aktiv ist) wird systemseitig mit einem Flag (Verwarnung) belegt. Bei 3 Flags wirst du für jegliche zukünftige Ersatzanfragen dieses Slots gesperrt!\n\n` +
       `*Ablauf:*\n` +
-      `1. Dein Key wird zurückgesetzt.\n` +
+      `1. Dein Slot wird zurückgesetzt.\n` +
       `2. Du wirst aufgefordert, neue Daten für einen *NEUEN* Spotify-Account eingegeben.\n\n` +
       `*Kompensation:*\n` +
       `Als Entschädigung für den Ausfall schreiben wir deiner verbleibenden Laufzeit bei erfolgreichem Upgrade automatisch *48 Stunden extra* gut! 🎁\n\n` +
@@ -313,16 +313,16 @@ const locales = {
     
     replace_blocked: `❌ *Aktion gesperrt!*\n\n` +
       `Du hast das Limit von 3 Verwarnungen (Flags) wegen missbräuchlicher Ersatzanfragen erreicht.\n` +
-      `Weitere Ersatzanfragen für diesen Key/Account können nicht mehr bearbeitet werden.`,
+      `Weitere Ersatzanfragen für diesen Slot/Account können nicht mehr bearbeitet werden.`,
     replace_error_still_active: `⚠️ *Ersatz fehlgeschlagen: Premium noch aktiv!*\n\n` +
       `Laut Spotify-Schnittstelle ist Premium auf deinem Account noch aktiv. Du hast ein systemseitiges Flag erhalten.\n\n` +
       `*Status:* {flags}/3 Flags.\n` +
       `Bei 3 Flags wirst du für weitere Ersatzanfragen gesperrt!`,
     replace_confirm_not_active: '⚠️ Nur aktive Abonnements können reklamiert werden.',
     replace_started: `♻️ *Ersatz-Prozess gestartet!*\n\n` +
-      `Dein Key wird zurückgesetzt. Wir prüfen den Status alle 5 Minuten. Sobald dein Slot wieder freigegeben ist, senden wir dir hier eine Benachrichtigung, damit du deine neuen Spotify-Account-Daten eingeben kannst.`,
+      `Dein Slot wird zurückgesetzt. Wir prüfen den Status alle 5 Minuten. Sobald dein Slot wieder freigegeben ist, senden wir dir hier eine Benachrichtigung, damit du deine neuen Spotify-Account-Daten eingeben kannst.`,
     replace_error: '❌ Ersatz-Anfrage fehlgeschlagen.',
-    replace_key_not_ready: `⏳ *Der Key ist noch nicht wieder einsatzbereit.*\n\nUpgrader.cc gibt den Slot momentan frei. Bitte warte, bis du vom Bot die Benachrichtigung erhältst, dass der Key bereit ist.`,
+    replace_key_not_ready: `⏳ *Der Upgrade-Slot ist noch nicht wieder einsatzbereit.*\n\nUpgrader.cc gibt den Slot momentan frei. Bitte warte, bis du vom Bot die Benachrichtigung erhältst, dass der Slot bereit ist.`,
     
     credentials_prompt: `✏️ Bitte gib deine Spotify-Zugangsdaten im Format \`E-Mail:Passwort\` ein (z.B. \`spotify@mail.com:MeinPasswort123\`).\n\n` +
       `*WICHTIG:* Falls du Ersatz angefordert hast, erstelle zwingend einen *NEUEN* Spotify-Account, da Spotify Accounts nur alle 12 Monate einen Family-Plan wechseln können!`,
@@ -332,8 +332,8 @@ const locales = {
     credentials_not_waiting: '❌ Fehler: Dieses Abonnement wartet aktuell nicht auf die Eingabe von Zugangsdaten.',
     
     key_delay_text: `⚠️ *Upgrade-Verzögerung:*\n\n` +
-      `Aktuell sind keine freien Upgrade-Keys verfügbar. Der Admin wurde benachrichtigt und wird in Kürze neue Keys einpflegen oder dein Upgrade manuell durchführen.\n\n` +
-      `Deine Zugangsdaten wurden gespeichert. Sobald ein Key bereitsteht, wird das Upgrade durchgeführt.`,
+      `Aktuell sind keine freien Upgrade-Slots verfügbar. Der Admin wurde benachrichtigt und wird in Kürze neue Slots einpflegen oder dein Upgrade manuell durchführen.\n\n` +
+      `Deine Zugangsdaten wurden gespeichert. Sobald ein Slot bereitsteht, wird das Upgrade durchgeführt.`,
     upgrade_process_running: `🔄 *Upgrade-Prozess läuft!* (Dauer: ca. 5–30 Minuten)\n\n` +
       `Deine Zugangsdaten wurden verschlüsselt und an das System übertragen.\n` +
       `Das Upgrade wird nun im Hintergrund ausgeführt. Wir überprüfen den Status fortlaufend und senden dir hier eine Benachrichtigung, sobald dein Premium-Upgrade aktiv ist! 🎧`,
@@ -368,8 +368,8 @@ const locales = {
     notify_expired: `⚠️ *Dein Spotify Premium Upgrade ist abgelaufen!*\n\n` +
       `Die Laufzeit deines Abonnements ist beendet und dein Account wurde aus der Family-Gruppe entfernt.\n\n` +
       `Du kannst jederzeit im Hauptmenü über *🛍️ Paket buchen* ein neues Upgrade bestellen!`,
-    notify_replace_ready: `♻️ *Ersatz-Key ist bereit!*\n\n` +
-      `Dein Upgrade-Key wurde erfolgreich zurückgesetzt und freigegeben.\n\n` +
+    notify_replace_ready: `♻️ *Ersatz-Slot ist bereit!*\n\n` +
+      `Dein Upgrade-Slot wurde erfolgreich zurückgesetzt und freigegeben.\n\n` +
       `Bitte erstelle oder besorge einen *NEUEN, FRISCHEN Spotify-Account* (nicht den alten, da dieser für 12 Monate gesperrt ist!) und sende mir deine neuen Login-Daten im Format:\n` +
       `\`E-Mail:Passwort\`\n\n` +
       `z.B.: \`neueraccount@web.de:NeuesPasswort123\``,
@@ -380,10 +380,10 @@ const locales = {
     invoice_extend_success: '✅ *Reservierung verlängert!* Deine Zahlungsreservierung wurde um 30 Minuten verlängert.',
     invoice_extend_already: '⚠️ Du hast diese Reservierung bereits einmal verlängert.',
     invoice_extend_expired: '⚠️ Dieser Checkout ist bereits abgelaufen und kann nicht mehr verlängert werden.',
-    out_of_stock: '🔴 *Vorübergehend ausverkauft*\n\nAktuell sind keine Upgrade-Slots verfügbar. Bitte schaue später wieder vorbei oder abonniere Benachrichtigungen, um sofort informiert zu werden, wenn neue Lizenzen da sind!',
+    out_of_stock: '🔴 *Vorübergehend ausverkauft*\n\nAktuell sind keine Upgrade-Slots verfügbar. Bitte schaue später wieder vorbei oder abonniere Benachrichtigungen, um sofort informiert zu werden, wenn neue Upgrade-Slots da sind!',
     ping_btn: '🔔 Benachrichtigen bei Restock',
-    ping_subscribed: '✅ *Abonniert!*\n\nIch werde dir eine Nachricht senden, sobald wieder neue Upgrades verfügbar sind.',
-    restock_notification: '🎉 *Neue Upgrades verfügbar!*\n\nEs sind wieder neue Spotify Premium Upgrades auf Lager. Du kannst dein Upgrade jetzt über /buy starten.',
+    ping_subscribed: '✅ *Abonniert!*\n\nIch werde dir eine Nachricht senden, sobald wieder neue Upgrade-Slots verfügbar sind.',
+    restock_notification: '🎉 *Neue Upgrade-Slots verfügbar!*\n\nEs sind wieder neue Spotify Premium Upgrade-Slots auf Lager. Du kannst dein Upgrade jetzt über /buy starten.',
     milestone_10_prompt: '⭐ *Wie zufrieden bist du bisher mit deinem Upgrade für {pkgName}?*\n\nBitte bewerte deine Erfahrung unten:',
     milestone_10_thanks: '✅ *Vielen Dank für deine Bewertung!* Dein Feedback hilft uns, unseren Service zu verbessern.',
     milestone_10_already_rated: '⚠️ Du hast dieses Abonnement bereits bewertet.',
@@ -495,9 +495,9 @@ const locales = {
     
     replace_ask_text: `⚠️ *Запросить замену для этой подписки?*\n\n` +
       `Используйте эту опцию только в том случае, если вас досрочно удалили из семейного плана или ваш Premium перестал работать.\n\n` +
-      `*⚠️ ВАЖНОЕ ПРИМЕЧАНИЕ:* Ложный запрос замены (например, если Premium на вашем аккаунте все еще активен) приведет к системному Флагу (Предупреждению). После 3 Флагов вы будете заблокированы от дальнейших запросов замены по этому ключу!\n\n` +
+      `*⚠️ ВАЖНОЕ ПРИМЕЧАНИЕ:* Ложный запрос замены (например, если Premium на вашем аккаунте все еще активен) приведет к системному Флагу (Предупреждению). После 3 Флагов вы будете заблокированы от дальнейших запросов замены по этому слоту!\n\n` +
       `*Процесс:*\n` +
-      `1. Ваш ключ будет сброшен.\n` +
+      `1. Ваш слот будет сброшен.\n` +
       `2. Вам будет предложено ввести учетные данные для *НОВОГО* аккаунта Spotify.\n\n` +
       `*Компенсация:*\n` +
       `В качестве компенсации за простой мы автоматически добавим *48 часов бесплатно* к вашей подписке после успешной активации! 🎁\n\n` +
@@ -508,16 +508,16 @@ const locales = {
     
     replace_blocked: `❌ *Действие заблокировано!*\n\n` +
       `Вы достигли лимита в 3 предупреждения (Флага) из-за злоупотребления запросами замены.\n` +
-      `Дальнейшие запросы замены для этого ключа/аккаунта не могут быть обработаны.`,
+      `Дальнейшие запросы замены для этого слота/аккаунта не могут быть обработаны.`,
     replace_error_still_active: `⚠️ *Замена отклонена: Premium все еще активен!*\n\n` +
       `Согласно интерфейсу Spotify, Premium все еще активен на вашем аккаунте. Вы получили системный Флаг.\n\n` +
       `*Статус:* {flags}/3 Флагов.\n` +
       `При достижении 3 Флагов вы будете заблокированы от дальнейших запросов замены!`,
     replace_confirm_not_active: '⚠️ Только активные подписки могут быть отправлены на замену.',
     replace_started: `♻️ *Процесс замены запущен!*\n\n` +
-      `Ваш ключ сбрасывается. Мы проверяем статус каждые 5 минут. Как только ваш слот освободится, мы отправим вам уведомление здесь, чтобы вы могли ввести данные нового аккаунта Spotify.`,
+      `Ваш слот сбрасывается. Мы проверяем статус каждые 5 минут. Как только ваш слот освободится, мы отправим вам уведомление здесь, чтобы вы могли ввести данные нового аккаунта Spotify.`,
     replace_error: '❌ Запрос замены не удался.',
-    replace_key_not_ready: `⏳ *Ключ еще не готов к использованию.*\n\nUpgrader.cc освобождает слот. Пожалуйста, подождите, пока вы не получите уведомление от бота, что ключ готов.`,
+    replace_key_not_ready: `⏳ *Слот еще не готов к использованию.*\n\nUpgrader.cc освобождает слот. Пожалуйста, подождите, пока вы не получите уведомление от бота, что слот готов.`,
     
     credentials_prompt: `✏️ *Введите учетные данные Spotify*\n\n` +
       `Пожалуйста, отправьте мне логин и пароль в формате:\n` +
@@ -529,8 +529,8 @@ const locales = {
     credentials_not_waiting: '❌ Ошибка: В настоящее время эта подписка не ожидает ввода данных.',
     
     key_delay_text: `⚠️ *Задержка активации:*\n\n` +
-      `В настоящее время нет свободных ключей для активации. Администратор уведомлен и в ближайшее время добавит новые ключи или проведет ваше обновление вручную.\n\n` +
-      `Ваши учетные данные сохранены. Как только ключ будет готов, активация будет завершена.`,
+      `В настоящее время нет свободных слотов для активации. Администратор уведомлен и в ближайшее время добавит новые слоты или проведет ваше обновление вручную.\n\n` +
+      `Ваши учетные данные сохранены. Как только слот будет готов, активация будет завершена.`,
     upgrade_process_running: `🔄 *Процесс активации запущен!* (Длительность: около 5–30 минут)\n\n` +
       `Ваши учетные данные зашифрованы и переданы в систему.\n` +
       `Обновление выполняется в фоновом режиме. Мы отслеживаем статус и отправим вам уведомление здесь, как только активация Premium завершится! 🎧`,
@@ -565,8 +565,8 @@ const locales = {
     notify_expired: `⚠️ *Срок вашей подписки Spotify Premium истек!*\n\n` +
       `Срок действия вашего пакета подошел к концу, и ваш аккаунт был удален из семейной группы.\n\n` +
       `Вы можете заказать новый пакет в любое время в главном меню с помощью *🛍️ Заказать пакет*!`,
-    notify_replace_ready: `♻️ *Запасной ключ готов!*\n\n` +
-      `Ваш ключ активации был успешно сброшен и освобожден.\n\n` +
+    notify_replace_ready: `♻️ *Запасной слот готов!*\n\n` +
+      `Ваш слот активации был успешно сброшен и освобожден.\n\n` +
       `Пожалуйста, создайте или подготовьте *НОВЫЙ, СВЕЖИЙ аккаунт Spotify* (не используйте старый, так как он заблокирован на 12 месяцев!) и отправьте мне новые учетные данные в формате:\n` +
       `\`Email:Пароль\`\n\n` +
       `например: \`newaccount@web.com:NewPassword123\``,
@@ -580,7 +580,7 @@ const locales = {
     out_of_stock: '🔴 *Временно нет в наличии*\n\nВ настоящее время нет свободных слотов для обновления. Пожалуйста, зайдите позже или подпишитесь, чтобы получить уведомление о пополнении!',
     ping_btn: '🔔 Уведомить о пополнении',
     ping_subscribed: '✅ *Подписка оформлена!*\n\nЯ отправлю вам сообщение, как только появятся новые слоты.',
-    restock_notification: '🎉 *Пополнение слотов!*\n\nДоступны новые обновления Spotify Premium. Вы можете обновить свой аккаунт с помощью команды /buy.',
+    restock_notification: '🎉 *Пополнение слотов!*\n\nДоступны новые слоты для обновления Spotify Premium. Вы можете обновить свой аккаунт с помощью команды /buy.',
     milestone_10_prompt: '⭐ *Насколько вы довольны обновлением {pkgName} на данный момент?*\n\nПожалуйста, оцените ваш опыт ниже:',
     milestone_10_thanks: '✅ *Спасибо за вашу оценку!* Ваш отзыв помогает нам улучшать наш сервис.',
     milestone_10_already_rated: '⚠️ Вы уже оценили эту подписку.',
