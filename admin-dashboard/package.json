@@ -1,0 +1,19 @@
+{
+  "name": "spotify-upgrade-admin",
+  "version": "1.0.0",
+  "description": "Local Admin Dashboard for Spotify Premium Upgrade System",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js"
+  },
+  "dependencies": {
+    "@scure/bip32": "^1.4.0",
+    "bip39": "^3.1.0",
+    "bitcoinjs-lib": "^6.1.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pg": "^8.11.5"
+  }
+}

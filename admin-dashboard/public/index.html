@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spotify Upgrade Admin Dashboard</title>
+  <!-- Google Fonts: Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- CSS Styles -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">🟢</div>
+        <h1>Spotify Premium</h1>
+      </div>
+      <nav class="nav-menu">
+        <button class="nav-btn active" data-target="panel-overview">
+          <span class="icon">📊</span> Overview
+        </button>
+        <button class="nav-btn" data-target="panel-packages">
+          <span class="icon">🛍️</span> Packages
+        </button>
+        <button class="nav-btn" data-target="panel-keys">
+          <span class="icon">🔑</span> Upgrade Keys
+        </button>
+        <button class="nav-btn" data-target="panel-addresses">
+          <span class="icon">Ł</span> LTC Wallet Pool
+        </button>
+        <button class="nav-btn" data-target="panel-broadcast">
+          <span class="icon">📢</span> Broadcast
+        </button>
+        <button class="nav-btn" data-target="panel-coupons">
+          <span class="icon">🎟️</span> Coupons
+        </button>
+        <button class="nav-btn" data-target="panel-feedback">
+          <span class="icon">⭐</span> Bewertungen
+        </button>
+        <button class="nav-btn" data-target="panel-logs">
+          <span class="icon">🚨</span> Logs & Overrides
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <p>Local Admin Panel</p>
+        <span class="badge offline">Decoupled Mode</span>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="content-area">
+      <!-- Top header bar -->
+      <header class="top-header">
+        <h2>Dashboard</h2>
+        <div class="connection-status">
+          <span class="dot green"></span> Connected to Supabase
+        </div>
+      </header>
+
+      <!-- Database Connection Warning Banner (Toggled dynamically) -->
+      <div id="db-warning-banner" class="alert-info-box hidden" style="background-color:rgba(255, 77, 77, 0.08); border-color:var(--error-color); color:var(--text-main); margin-bottom:30px; padding:20px; border-radius:12px;">
+        <h4 style="font-family:var(--font-title); color:var(--error-color); margin-bottom:8px; font-size:16px;">⚠️ Datenbank-Schema nicht initialisiert</h4>
+        <p style="line-height:1.5; font-size:13px;">
+          Das SQL-Schema wurde noch nicht in Supabase ausgeführt. Bitte führe das SQL-Skript 
+          <code style="background-color:var(--bg-tertiary); padding:2px 6px; border-radius:4px; font-family:monospace;">database/schema.sql</code> 
+          im SQL Editor deiner Supabase Console aus, um das System vollständig zu aktivieren.
+        </p>
+      </div>
+
+      <!-- Panel: Overview -->
+      <section id="panel-overview" class="dashboard-panel active">
+        <!-- Admin Decisions Section (Shown only if users require action) -->
+        <div class="table-container list-box" id="admin-decisions-box" style="margin-bottom: 30px; display: none; border-color: var(--error-color);">
+          <h3 style="color: var(--error-color); margin-bottom: 15px;">⚖️ Ausstehende Entscheidungen (Spam-Schutz)</h3>
+          <div class="table-scroll">
+            <table id="table-admin-decisions">
+              <thead>
+                <tr>
+                  <th>Telegram ID</th>
+                  <th>Username</th>
+                  <th>Sperren-Zähler</th>
+                  <th>Aktion</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Filled by Javascript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Stats cards container -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>Registered Users</h3>
+            <p id="stat-users">-</p>
+            <span class="subtext">Active Telegram users</span>
+          </div>
+          <div class="stat-card">
+            <h3>Active Upgrades</h3>
+            <p id="stat-active">-</p>
+            <span class="subtext">Paying members</span>
+          </div>
+          <div class="stat-card">
+            <h3>Total Revenue</h3>
+            <p id="stat-revenue">-</p>
+            <span class="subtext">LTC verified (converted to EUR)</span>
+          </div>
+          <div class="stat-card">
+            <h3>Keys in Pool</h3>
+            <p id="stat-keys">-</p>
+            <span class="subtext">Usable licenses</span>
+          </div>
+        </div>
+
+        <div class="dashboard-split">
+          <!-- Recent Subscriptions -->
+          <div class="table-container list-box">
+            <h3>Recent Subscriptions</h3>
+            <div class="table-scroll">
+              <table id="table-recent-subs">
+                <thead>
+                  <tr>
+                    <th>Telegram ID</th>
+                    <th>Spotify Email</th>
+                    <th>Package</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Filled by Javascript -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Unresolved Logs -->
+          <div class="list-box logs-box">
+            <h3>🚨 Critical Unresolved Logs</h3>
+            <div class="logs-container" id="overview-logs-list">
+              <!-- Filled by Javascript -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel: Packages -->
+      <section id="panel-packages" class="dashboard-panel">
+        <div class="panel-header-actions">
+          <h3>📦 Pricing & Packages</h3>
+          <button class="btn btn-primary" onclick="showAddPackageModal()">+ Add New Package</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Package Name</th>
+                <th>Duration (Months)</th>
+                <th>Price (EUR)</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="table-packages-body">
+              <!-- Filled by Javascript -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Panel: Keys -->
+      <section id="panel-keys" class="dashboard-panel">
+        <div class="panel-header-actions">
+          <h3>🔑 Reseller Upgrade Keys</h3>
+          <button class="btn btn-primary" onclick="showImportKeysModal()">+ Import Keys</button>
+        </div>
+        
+        <div class="keys-summary-strip">
+          <div class="key-status-bubble usable">Usable: <span id="keys-count-usable">0</span></div>
+          <div class="key-status-bubble active">Active: <span id="keys-count-active">0</span></div>
+          <div class="key-status-bubble expired">Expired: <span id="keys-count-expired">0</span></div>
+          <div class="key-status-bubble error">Error: <span id="keys-count-error">0</span></div>
+        </div>
+
+        <div class="table-container">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>API Key</th>
+                  <th>Status</th>
+                  <th>Spotify Acc ID</th>
+                  <th>Error Description</th>
+                  <th>Import Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="table-keys-body">
+                <!-- Filled by Javascript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel: Addresses (LTC Wallet Manager) -->
+      <section id="panel-addresses" class="dashboard-panel">
+        <!-- 1. Wallet Locked / Uncreated Setup View -->
+        <div id="wallet-setup-container" class="wallet-setup-card">
+          <!-- State: No Wallet Created -->
+          <div id="wallet-state-uncreated" class="wallet-wizard">
+            <h3>Ł Lokale Litecoin Wallet einrichten</h3>
+            <p class="description">Erstelle eine neue HD-Wallet oder stelle eine bestehende über deine Seed-Phrase wieder her. Alle privaten Schlüssel verbleiben ausschließlich lokal auf deinem Gerät und werden AES-256 verschlüsselt gespeichert.</p>
+            
+            <div class="wallet-setup-actions">
+              <button class="btn btn-primary" onclick="showWalletWizard('create')">Neue Wallet erstellen</button>
+              <button class="btn btn-secondary" onclick="showWalletWizard('restore')">Aus Seed-Phrase wiederherstellen</button>
+            </div>
+
+            <!-- Sub-wizard: Create -->
+            <div id="wizard-create" class="wizard-step hidden">
+              <hr class="wizard-divider">
+              <h4>1. Schreibe deine Recovery Seed-Phrase auf</h4>
+              <div class="mnemonic-box" id="new-mnemonic-display">Wird geladen...</div>
+              <p class="alert-warning-text">⚠️ Schreibe diese 12 Wörter in der richtigen Reihenfolge auf Papier auf. Sie sind die einzige Möglichkeit, dein Guthaben wiederherzustellen, falls dein Gerät beschädigt wird!</p>
+              
+              <div class="form-group">
+                <label for="create-wallet-password">Wallet-Passwort festlegen (zur Verschlüsselung)</label>
+                <input type="password" id="create-wallet-password" required placeholder="Sicheres Passwort eingeben">
+              </div>
+              <button class="btn btn-primary" onclick="submitCreateWallet()">Wallet erstellen & Verschlüsseln</button>
+            </div>
+
+            <!-- Sub-wizard: Restore -->
+            <div id="wizard-restore" class="wizard-step hidden">
+              <hr class="wizard-divider">
+              <h4>Wallet wiederherstellen</h4>
+              <div class="form-group">
+                <label for="restore-mnemonic">12-Wort Recovery Phrase</label>
+                <textarea id="restore-mnemonic" rows="3" required placeholder="Wort1 Wort2 Wort3..."></textarea>
+              </div>
+              <div class="form-group">
+                <label for="restore-wallet-password">Neues Wallet-Passwort festlegen</label>
+                <input type="password" id="restore-wallet-password" required placeholder="Sicheres Passwort eingeben">
+              </div>
+              <button class="btn btn-primary" onclick="submitRestoreWallet()">Wallet wiederherstellen</button>
+            </div>
+          </div>
+
+          <!-- State: Wallet Exists but is Locked -->
+          <div id="wallet-state-locked" class="wallet-wizard hidden">
+            <h3>🔒 Wallet gesperrt</h3>
+            <p class="description">Die Wallet-Datei wurde geladen. Bitte gib dein Wallet-Passwort ein, um den LTC-Adresspool freizugeben und Transaktionen zu autorisieren.</p>
+            <form onsubmit="submitUnlockWallet(event)">
+              <div class="form-group">
+                <input type="password" id="unlock-password" required placeholder="Wallet-Passwort eingeben">
+              </div>
+              <button type="submit" class="btn btn-primary">🔓 Entsperren & Synchronisieren</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- 2. Wallet Unlocked View -->
+        <div id="wallet-unlocked-container" class="hidden">
+          <div class="panel-header-actions">
+            <h3>Ł Litecoin Wallet Manager</h3>
+            <div style="display: flex; gap: 10px;">
+              <button class="btn btn-secondary" onclick="lockWallet()">🔒 Wallet sperren</button>
+              <button class="btn btn-secondary" onclick="refreshLtcBalances()">Balances aktualisieren</button>
+              <button class="btn btn-primary" onclick="openModal('modal-withdraw')">💸 LTC auszahlen / überweisen</button>
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <h3>Wallet Status</h3>
+              <p style="font-size: 24px; color: var(--accent-color); margin-bottom: 8px;">🔓 Unlocked</p>
+              <div class="wallet-mnemonic-reveal-box" style="margin-top: 10px;">
+                <button class="btn btn-secondary btn-sm" onclick="toggleMnemonicReveal()">Seed-Phrase anzeigen</button>
+                <span id="wallet-mnemonic-display" class="hidden" style="margin-top: 10px; display: block;"></span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <h3>Gesamtguthaben</h3>
+              <p id="wallet-total-balance" style="color: var(--accent-color);">-</p>
+              <span class="subtext">Summe über alle 50 Pool-Adressen</span>
+            </div>
+            <div class="stat-card">
+              <h3>Extended Public Key (XPUB)</h3>
+              <p id="wallet-xpub-display" style="font-size: 13px; font-family: monospace; word-break: break-all; font-weight: normal; margin-top: 10px; line-height: 1.4;">-</p>
+              <span class="subtext">Derivation root for public pool</span>
+            </div>
+          </div>
+
+          <div class="panel-header-actions" style="margin-top: 40px;">
+            <h3>Ł Deterministic LTC Address Pool (0-49)</h3>
+          </div>
+
+          <div class="table-container">
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Index</th>
+                    <th>Litecoin Address</th>
+                    <th>Reservation Status</th>
+                    <th>Use Count</th>
+                    <th>Current Balance</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="table-addresses-body">
+                  <!-- Filled by Javascript -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Modal: Withdraw LTC -->
+      <div id="modal-withdraw" class="modal">
+        <div class="modal-content glass">
+          <h3>💸 Litecoin überweisen (Auszahlung)</h3>
+          <form onsubmit="submitWithdrawForm(event)">
+            <div class="form-group">
+              <label for="withdraw-recipient">Empfänger Litecoin-Adresse (Legacy 'L...')</label>
+              <input type="text" id="withdraw-recipient" required placeholder="L...">
+            </div>
+            <div class="form-group">
+              <label for="withdraw-amount">Betrag in LTC</label>
+              <input type="number" id="withdraw-amount" required step="0.000001" min="0.0001" placeholder="e.g. 0.05">
+            </div>
+            <div class="form-group">
+              <label for="withdraw-fee">Transaktionsgebühr (LTC)</label>
+              <input type="number" id="withdraw-fee" required step="0.00001" value="0.0001">
+              <span class="subtext">Standardgebühr ist 0.0001 LTC. Höhere Gebühren beschleunigen die Bestätigung.</span>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" onclick="closeModal('modal-withdraw')">Abbrechen</button>
+              <button type="submit" class="btn btn-primary danger">💸 Senden & Rundsenden</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Panel: Broadcast -->
+      <section id="panel-broadcast" class="dashboard-panel">
+        <div class="panel-header-actions">
+          <h3>📢 Telegram Broadcast Manager</h3>
+          <button class="btn btn-primary" onclick="showAddBroadcastModal()">+ Create Broadcast</button>
+        </div>
+        
+        <div class="table-container">
+          <div class="table-scroll">
+            <table id="table-broadcasts">
+              <thead>
+                <tr>
+                  <th>Created</th>
+                  <th>Message</th>
+                  <th>Scheduled For</th>
+                  <th>Status</th>
+                  <th>Sent To</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="table-broadcasts-body">
+                <!-- Filled by Javascript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel: Logs -->
+      <section id="panel-logs" class="dashboard-panel">
+        <h3>🚨 System Logs & Administrative Overrides</h3>
+        <div class="table-container">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Level</th>
+                  <th>Component</th>
+                  <th>Message</th>
+                  <th>Details</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="table-logs-body">
+                <!-- Filled by Javascript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel: Coupons -->
+      <section id="panel-coupons" class="dashboard-panel">
+        <div class="panel-header-actions">
+          <h3>🎟️ Coupons & Discounts</h3>
+          <button class="btn btn-primary" onclick="showAddCouponModal()">+ Add New Coupon</button>
+        </div>
+        <div class="table-container">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Discount Type</th>
+                  <th>Discount Value</th>
+                  <th>Max Uses</th>
+                  <th>Use Count</th>
+                  <th>Expires At</th>
+                  <th>Created At</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="table-coupons-body">
+                <!-- Filled by Javascript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      <!-- Panel: Feedback Ratings -->
+      <section id="panel-feedback" class="dashboard-panel">
+        <div class="panel-header-actions">
+          <h3>⭐ Bewertungen & Kundenzufriedenheit</h3>
+        </div>
+        <div class="table-container">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Erstellt am</th>
+                  <th>Telegram ID</th>
+                  <th>Username</th>
+                  <th>Paket</th>
+                  <th>Bewertung</th>
+                  <th>Kommentar</th>
+                  <th>Aktion</th>
+                </tr>
+              </thead>
+              <tbody id="table-feedback-body">
+                <!-- Filled by Javascript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal: Add Package -->
+  <div id="modal-package" class="modal">
+    <div class="modal-content glass">
+      <h3 id="package-modal-title">Add Package</h3>
+      <form id="form-package" onsubmit="submitPackageForm(event)">
+        <input type="hidden" id="package-id">
+        <div class="form-group">
+          <label for="package-name">Package Name</label>
+          <input type="text" id="package-name" required placeholder="e.g. 3 Monate Spotify Premium">
+        </div>
+        <div class="form-group">
+          <label for="package-duration">Duration (Months)</label>
+          <input type="number" id="package-duration" required min="1" placeholder="e.g. 3">
+        </div>
+        <div class="form-group">
+          <label for="package-price">Price (EUR)</label>
+          <input type="number" id="package-price" required step="0.01" min="0" placeholder="e.g. 14.99">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-package')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Package</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Coupon -->
+  <div id="modal-coupon" class="modal">
+    <div class="modal-content glass">
+      <h3>Add Coupon</h3>
+      <form id="form-coupon" onsubmit="submitCouponForm(event)">
+        <div class="form-group">
+          <label for="coupon-code">Coupon Code</label>
+          <input type="text" id="coupon-code" required placeholder="e.g. SAVE15" style="text-transform: uppercase;">
+          <span class="subtext">Alphanumeric, dashes, and underscores only.</span>
+        </div>
+        <div class="form-group">
+          <label for="coupon-type">Discount Type</label>
+          <select id="coupon-type" required style="width:100%; padding:10px; border-radius:8px; background-color:var(--bg-tertiary); color:var(--text-main); border:1px solid var(--border-color); font-family:inherit;">
+            <option value="percentage">Percentage (%)</option>
+            <option value="fixed">Fixed (€)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="coupon-value">Discount Value</label>
+          <input type="number" id="coupon-value" required step="0.01" min="0.01" placeholder="e.g. 15.00">
+        </div>
+        <div class="form-group">
+          <label for="coupon-max-uses">Max Uses (Optional)</label>
+          <input type="number" id="coupon-max-uses" min="1" placeholder="e.g. 100 (leave blank for unlimited)">
+        </div>
+        <div class="form-group">
+          <label for="coupon-expires">Expiration Date (Optional)</label>
+          <input type="datetime-local" id="coupon-expires" style="width:100%; padding:10px; border-radius:8px; background-color:var(--bg-tertiary); color:var(--text-main); border:1px solid var(--border-color); font-family:inherit;">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-coupon')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Coupon</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Import Keys -->
+  <div id="modal-import-keys" class="modal">
+    <div class="modal-content glass">
+      <h3>Bulk Import Reseller Keys</h3>
+      <form onsubmit="submitImportKeysForm(event)">
+        <div class="form-group">
+          <label for="raw-keys">Reseller Keys (One per line)</label>
+          <textarea id="raw-keys" rows="10" required placeholder="Paste keys here...&#10;KEY-12345-ABCDE&#10;KEY-67890-FGHIJ"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-import-keys')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Import Keys</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Generate Address Pool -->
+  <div id="modal-generate-pool" class="modal">
+    <div class="modal-content glass">
+      <h3>Generate 50 Address Pool</h3>
+      <form onsubmit="submitGeneratePoolForm(event)">
+        <div class="form-group">
+          <label for="wallet-xpub">Litecoin Wallet Extended Public Key (xpub / Ltub)</label>
+          <input type="text" id="wallet-xpub" required placeholder="e.g. Ltub52m... or xpub6Bos...">
+          <span class="subtext">Must be derived at the account level (typically m/44'/2'/0'). This action will overwrite existing addresses.</span>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-generate-pool')">Cancel</button>
+          <button type="submit" class="btn btn-primary danger">Generate & Overwrite Pool</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Subscription Credentials -->
+  <div id="modal-edit-sub" class="modal">
+    <div class="modal-content glass">
+      <h3>Abonnement Details bearbeiten</h3>
+      <form onsubmit="submitEditSubForm(event)">
+        <input type="hidden" id="edit-sub-id">
+        
+        <div class="form-group">
+          <label for="edit-sub-email">Spotify Login Email</label>
+          <input type="email" id="edit-sub-email" required placeholder="e.g. user@spotify.com">
+        </div>
+        
+        <div class="form-group">
+          <label for="edit-sub-password">Spotify Passwort (wird verschlüsselt gespeichert)</label>
+          <input type="password" id="edit-sub-password" placeholder="Passwort eingeben, um es zu ändern (sonst leer lassen)">
+        </div>
+
+        <div class="form-group">
+          <label for="edit-sub-status">Abonnement Status</label>
+          <select id="edit-sub-status" style="width:100%; padding:10px; border-radius:8px; background-color:var(--bg-tertiary); color:var(--text-main); border:1px solid var(--border-color); font-family:inherit;">
+            <option value="waiting_coupon">Waiting for Coupon</option>
+            <option value="pending_payment">Pending Payment</option>
+            <option value="activating">Activating / Waiting for credentials</option>
+            <option value="active">Active</option>
+            <option value="expired">Expired</option>
+            <option value="renewing">Replacement processing</option>
+            <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-sub-expires">Ablaufdatum (Expires At)</label>
+          <input type="datetime-local" id="edit-sub-expires" style="width:100%; padding:10px; border-radius:8px; background-color:var(--bg-tertiary); color:var(--text-main); border:1px solid var(--border-color); font-family:inherit;">
+        </div>
+
+        <div class="modal-footer" style="justify-content: space-between; display: flex; align-items: center; gap: 10px;">
+          <button type="button" class="btn btn-danger" onclick="deleteSubscription()" style="background-color: var(--error-color);">🗑️ Löschen</button>
+          <div style="display: flex; gap: 10px;">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('modal-edit-sub')">Abbrechen</button>
+            <button type="submit" class="btn btn-primary">Speichern</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Create Broadcast -->
+  <div id="modal-broadcast" class="modal">
+    <div class="modal-content glass" style="max-width: 600px;">
+      <h3>📢 New Broadcast Message</h3>
+      <form id="form-broadcast" onsubmit="submitBroadcastForm(event)">
+        <div class="form-group">
+          <label for="broadcast-message">Message Content (Markdown Supported)</label>
+          <textarea id="broadcast-message" rows="8" required placeholder="Write your broadcast message here...&#10;&#10;e.g. 🎁 *Special Offer!*\nUpgrade now and get 15% off using code..." style="width:100%; border-radius:8px; padding:12px; background-color:var(--bg-tertiary); color:var(--text-main); border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="broadcast-scheduled">Schedule Send Time (Optional)</label>
+          <input type="datetime-local" id="broadcast-scheduled" style="width:100%; padding:10px; border-radius:8px; background-color:var(--bg-tertiary); color:var(--text-main); border:1px solid var(--border-color); font-family:inherit;">
+          <span class="subtext">Leave empty to send immediately to all users.</span>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-broadcast')">Cancel</button>
+          <button type="submit" class="btn btn-primary">📢 Send / Schedule Broadcast</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- JS Scripts -->
+  <script src="js/app.js"></script>
+</body>
+</html>

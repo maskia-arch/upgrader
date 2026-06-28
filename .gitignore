@@ -8,8 +8,13 @@ node_modules/
 dist/
 npm-debug.log*
 
-# IGNORE LOCAL ADMIN DASHBOARD TO PREVENT GITHUB PUSHES
-admin-dashboard/
+# Ignore sensitive files in admin dashboard
+admin-dashboard/wallet.json
+admin-dashboard/.env.local
+admin-dashboard/env.local
+admin-dashboard/.env.local.txt
+admin-dashboard/env.local.txt
+**/wallet.json
 
 # IGNORE SETUP, README AND TESTS FOR LOCAL USE ONLY
 README.md
