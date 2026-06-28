@@ -105,56 +105,80 @@ router.get('/logs', async (req, res) => {
 
 // 2. Packages CRUD
 router.get('/packages', async (req, res) => {
+  console.log('[DEBUG GET /packages] Fetching all packages...');
   try {
     const { data, error } = await supabase.from('packages').select('*').order('created_at', { ascending: false });
+    console.log('[DEBUG GET /packages] DB Result count:', data ? data.length : 0, 'Error:', error);
     if (error) return handleDbError(error, res);
     res.json(data || []);
   } catch (err) {
+    console.error('[DEBUG GET /packages] Catch error:', err);
     handleDbError(err, res);
   }
 });
 
 router.post('/packages', async (req, res) => {
+  console.log('[DEBUG POST /packages] req.body:', req.body);
   try {
     const { name, duration_months, price_eur } = req.body;
+    const insertPayload = { 
+      name, 
+      duration_months: parseInt(duration_months), 
+      price_eur: parseFloat(price_eur) 
+    };
+    console.log('[DEBUG POST /packages] Inserting payload:', insertPayload);
     const { data, error } = await supabase
       .from('packages')
-      .insert({ name, duration_months: parseInt(duration_months), price_eur: parseFloat(price_eur) })
+      .insert(insertPayload)
       .select()
       .single();
 
+    console.log('[DEBUG POST /packages] DB Result:', { data, error });
     if (error) return handleDbError(error, res);
     res.json(data);
   } catch (err) {
+    console.error('[DEBUG POST /packages] Catch error:', err);
     handleDbError(err, res);
   }
 });
 
 router.put('/packages/:id', async (req, res) => {
+  const { id } = req.params;
+  console.log(`[DEBUG PUT /packages/${id}] req.body:`, req.body);
   try {
-    const { id } = req.params;
     const { name, duration_months, price_eur } = req.body;
+    const updatePayload = { 
+      name, 
+      duration_months: parseInt(duration_months), 
+      price_eur: parseFloat(price_eur) 
+    };
+    console.log(`[DEBUG PUT /packages/${id}] Updating payload:`, updatePayload);
     const { data, error } = await supabase
       .from('packages')
-      .update({ name, duration_months: parseInt(duration_months), price_eur: parseFloat(price_eur) })
+      .update(updatePayload)
       .eq('id', id)
       .select()
       .single();
 
+    console.log(`[DEBUG PUT /packages/${id}] DB Result:`, { data, error });
     if (error) return handleDbError(error, res);
     res.json(data);
   } catch (err) {
+    console.error(`[DEBUG PUT /packages/${id}] Catch error:`, err);
     handleDbError(err, res);
   }
 });
 
 router.delete('/packages/:id', async (req, res) => {
+  const { id } = req.params;
+  console.log(`[DEBUG DELETE /packages/${id}] deleting...`);
   try {
-    const { id } = req.params;
     const { error } = await supabase.from('packages').delete().eq('id', id);
+    console.log(`[DEBUG DELETE /packages/${id}] DB Result error:`, error);
     if (error) return handleDbError(error, res);
-    res.json({ success: true });
+    res.sendStatus(204);
   } catch (err) {
+    console.error(`[DEBUG DELETE /packages/${id}] Catch error:`, err);
     handleDbError(err, res);
   }
 });
@@ -266,41 +290,62 @@ router.post('/addresses/release/:id', async (req, res) => {
 });
 
 router.get('/addresses/balances', async (req, res) => {
+  console.log('[DEBUG GET /addresses/balances] Starting sync & balance check...');
   try {
     // Sync address pool first if wallet is unlocked (allows recovering addresses from a restored wallet)
     if (wallet.isUnlocked()) {
       try {
         const { xpub } = wallet.getUnlockedWallet();
+        console.log('[DEBUG GET /addresses/balances] Syncing addresses from xpub...');
         await syncAddressPoolToDb(xpub);
+        console.log('[DEBUG GET /addresses/balances] Addresses sync completed.');
       } catch (syncErr) {
-        console.error('[SYNC ERROR] Failed to sync address pool on balance refresh:', syncErr);
+        console.error('[DEBUG GET /addresses/balances] Sync address pool error:', syncErr);
       }
+    } else {
+      console.log('[DEBUG GET /addresses/balances] Wallet is locked, skipping address sync.');
     }
 
     const { data: addrs, error } = await supabase.from('ltc_addresses').select('*').order('address_index', { ascending: true });
-    if (error) return handleDbError(error, res);
-    if (!addrs || addrs.length === 0) return res.json([]);
-
-    const results = [];
-    for (const addr of addrs) {
-      let balance = 0;
-      try {
-        balance = await wallet.fetchLtcBalance(addr.ltc_address);
-      } catch (err) {
-        console.warn(`[BALANCE CHECK WARNING] Failed fetching for address ${addr.ltc_address}:`, err.message);
-      }
-      results.push({
-        id: addr.id,
-        ltc_address: addr.ltc_address,
-        address_index: addr.address_index,
-        balanceLtc: balance
-      });
-      // 1.5 seconds delay between checks to avoid rate limits
-      await new Promise(resolve => setTimeout(resolve, 1500));
+    if (error) {
+      console.error('[DEBUG GET /addresses/balances] DB select error:', error);
+      return handleDbError(error, res);
+    }
+    if (!addrs || addrs.length === 0) {
+      console.log('[DEBUG GET /addresses/balances] No addresses found in DB.');
+      return res.json([]);
     }
 
+    console.log(`[DEBUG GET /addresses/balances] Checking balances for ${addrs.length} addresses in batches of 10...`);
+    const results = [];
+    const batchSize = 10;
+    for (let i = 0; i < addrs.length; i += batchSize) {
+      const batch = addrs.slice(i, i + batchSize);
+      console.log(`[DEBUG GET /addresses/balances] Processing batch ${Math.floor(i / batchSize) + 1}...`);
+      await Promise.all(batch.map(async (addr) => {
+        let balance = 0;
+        try {
+          balance = await wallet.fetchLtcBalance(addr.ltc_address);
+        } catch (err) {
+          console.warn(`[BALANCE CHECK WARNING] Failed fetching for address ${addr.ltc_address}:`, err.message);
+        }
+        results.push({
+          id: addr.id,
+          ltc_address: addr.ltc_address,
+          address_index: addr.address_index,
+          balanceLtc: balance
+        });
+      }));
+      if (i + batchSize < addrs.length) {
+        console.log('[DEBUG GET /addresses/balances] Waiting 500ms before next batch...');
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    console.log('[DEBUG GET /addresses/balances] Balance check completed successfully.');
     res.json(results);
   } catch (err) {
+    console.error('[DEBUG GET /addresses/balances] Catch error:', err);
     res.status(500).json({ error: err.message });
   }
 });
