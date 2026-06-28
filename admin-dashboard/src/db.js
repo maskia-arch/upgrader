@@ -11,15 +11,18 @@ const pool = new Pool({
 async function initializeDatabase() {
   try {
     const checkRes = await pool.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'packages'
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name IN (
+        'packages', 'ltc_addresses', 'upgrader_keys', 'users', 
+        'coupons', 'subscriptions', 'invoices', 'system_logs', 
+        'broadcasts', 'feedback', 'bot_messages_cleanup'
       );
     `);
     
-    if (!checkRes.rows[0].exists) {
-      console.log('[DATABASE] Table "packages" does not exist. Running database schema initialization...');
+    if (checkRes.rows.length < 11) {
+      console.log('[DATABASE] Some tables are missing. Running database schema initialization...');
       const paths = [
         path.join(__dirname, '../../database/schema.sql'),
         path.join(__dirname, '../database/schema.sql'),

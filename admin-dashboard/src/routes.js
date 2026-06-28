@@ -12,7 +12,7 @@ function handleDbError(err, res) {
   if (err && err.code === '42P01') {
     return res.json({
       error: 'database_not_initialized',
-      message: 'Das SQL-Schema wurde noch nicht in Supabase ausgeführt. Bitte führe das SQL-Skript (database/schema.sql) im Supabase SQL Editor aus.'
+      message: 'Das SQL-Schema wurde noch nicht in PostgreSQL ausgeführt. Bitte stelle sicher, dass das SQL-Skript (database/schema.sql) in deiner PostgreSQL-Datenbank importiert wurde.'
     });
   }
   return res.status(500).json({ error: err ? err.message : 'Database error' });
