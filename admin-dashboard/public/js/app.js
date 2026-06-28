@@ -750,6 +750,9 @@ async function refreshLtcBalances() {
     if (checkRequestError(data)) return;
     if (data.error) throw new Error(data.error);
 
+    // Refresh address list in DOM to display any newly synchronized addresses
+    await fetchAddresses();
+
     let total = 0;
     data.forEach(item => {
       const row = document.getElementById(`addr-row-${item.id}`);

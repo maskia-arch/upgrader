@@ -267,6 +267,16 @@ router.post('/addresses/release/:id', async (req, res) => {
 
 router.get('/addresses/balances', async (req, res) => {
   try {
+    // Sync address pool first if wallet is unlocked (allows recovering addresses from a restored wallet)
+    if (wallet.isUnlocked()) {
+      try {
+        const { xpub } = wallet.getUnlockedWallet();
+        await syncAddressPoolToDb(xpub);
+      } catch (syncErr) {
+        console.error('[SYNC ERROR] Failed to sync address pool on balance refresh:', syncErr);
+      }
+    }
+
     const { data: addrs, error } = await supabase.from('ltc_addresses').select('*').order('address_index', { ascending: true });
     if (error) return handleDbError(error, res);
     if (!addrs || addrs.length === 0) return res.json([]);
@@ -518,32 +528,51 @@ router.get('/wallet/mnemonic', (req, res) => {
 
 // Sync xpub derived addresses pool to Supabase
 async function syncAddressPoolToDb(xpub) {
-  const addresses = wallet.generatePool(xpub);
+  const derivedAddresses = wallet.generatePool(xpub);
   
   // Fetch existing addresses from DB
   const { data: existingAddrs, error: selectErr } = await supabase
     .from('ltc_addresses')
-    .select('ltc_address');
+    .select('*');
   
   if (selectErr && selectErr.code !== '42P01') throw selectErr;
   
-  const existingSet = new Set(existingAddrs ? existingAddrs.map(a => a.ltc_address) : []);
-  const missingAddresses = addresses.filter(addr => !existingSet.has(addr));
+  const dbMap = new Map();
+  if (existingAddrs) {
+    existingAddrs.forEach(a => dbMap.set(a.address_index, a));
+  }
   
-  if (missingAddresses.length > 0) {
-    const insertData = missingAddresses.map(addr => {
-      const index = addresses.indexOf(addr);
-      return {
-        ltc_address: addr,
-        address_index: index,
-        is_reserved: false,
-        reserved_until: null,
-        use_count: 0
-      };
-    });
+  for (let i = 0; i < 50; i++) {
+    const derivedAddr = derivedAddresses[i];
+    const dbRecord = dbMap.get(i);
     
-    const { error: insertErr } = await supabase.from('ltc_addresses').insert(insertData);
-    if (insertErr && insertErr.code !== '42P01') throw insertErr;
+    if (dbRecord) {
+      if (dbRecord.ltc_address !== derivedAddr) {
+        // Address has changed (new wallet restored), update it and reset reservations
+        const { error: updateErr } = await supabase
+          .from('ltc_addresses')
+          .update({
+            ltc_address: derivedAddr,
+            is_reserved: false,
+            reserved_until: null,
+            use_count: 0
+          })
+          .eq('id', dbRecord.id);
+        if (updateErr) console.error(`[SYNC WARNING] Failed to update address at index ${i}:`, updateErr.message);
+      }
+    } else {
+      // Insert missing address
+      const { error: insertErr } = await supabase
+        .from('ltc_addresses')
+        .insert({
+          ltc_address: derivedAddr,
+          address_index: i,
+          is_reserved: false,
+          reserved_until: null,
+          use_count: 0
+        });
+      if (insertErr) console.error(`[SYNC WARNING] Failed to insert address at index ${i}:`, insertErr.message);
+    }
   }
 }
 
