@@ -1,6 +1,12 @@
+const dns = require('dns');
+if (typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 const express = require('express');
 const path = require('path');
 const config = require('./config');
+const { initializeDatabase } = require('./db');
 const routes = require('./routes');
 
 const app = express();
@@ -93,10 +99,23 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// Start listening
-app.listen(config.port, () => {
-  console.log(`==================================================`);
-  console.log(`Spotify Premium Upgrade - Local Admin Dashboard`);
-  console.log(`Server listening on: http://localhost:${config.port}`);
-  console.log(`==================================================`);
-});
+// Start server after database is fully initialized
+async function start() {
+  try {
+    console.log('[SYSTEM] Initializing database schema...');
+    await initializeDatabase();
+    console.log('[SYSTEM] Database initialization completed successfully.');
+
+    app.listen(config.port, () => {
+      console.log(`==================================================`);
+      console.log(`Spotify Premium Upgrade - Local Admin Dashboard`);
+      console.log(`Server listening on: http://localhost:${config.port}`);
+      console.log(`==================================================`);
+    });
+  } catch (err) {
+    console.error('[SYSTEM CRITICAL] Database initialization failed. Exiting...', err);
+    process.exit(1);
+  }
+}
+
+start();

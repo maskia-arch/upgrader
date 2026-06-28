@@ -42,10 +42,9 @@ async function initializeDatabase() {
     }
   } catch (err) {
     console.error('[DATABASE ERROR] Auto-migration/initialization failed:', err.message);
+    throw err;
   }
 }
-
-initializeDatabase();
 
 // Define relationships for subquery joins
 const RELATIONS = {
@@ -503,4 +502,5 @@ const supabase = {
 module.exports = {
   supabase,
   pool,
+  initializeDatabase,
 };

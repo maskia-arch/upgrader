@@ -1,5 +1,11 @@
+const dns = require('dns');
+if (typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 const { bot } = require('./bot');
 const { startWatcher } = require('./watcher');
+const { initializeDatabase } = require('./db');
 
 // Register global error handlers to prevent transient crashes in production
 process.on('uncaughtException', (err) => {
@@ -12,6 +18,11 @@ process.on('unhandledRejection', (reason, promise) => {
 
 async function main() {
   console.log('[SYSTEM] Starting Spotify Premium Upgrade Bot...');
+
+  // Await database initialization
+  console.log('[SYSTEM] Initializing database schema...');
+  await initializeDatabase();
+  console.log('[SYSTEM] Database initialization completed successfully.');
 
   // Start Background Watcher & Workers (runs independently of bot polling launch)
   startWatcher(bot);
