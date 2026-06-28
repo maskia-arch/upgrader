@@ -182,3 +182,36 @@ BEGIN
   WHERE id = coupon_uuid;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 12. Rotate LTC Address atomic selection function
+CREATE OR REPLACE FUNCTION rotate_ltc_address()
+RETURNS SETOF ltc_addresses AS $$
+DECLARE
+  selected_addr ltc_addresses;
+BEGIN
+  -- Select one address that is not reserved or whose reservation has expired
+  -- Lock it for update to prevent concurrent reservation of the same address
+  SELECT * INTO selected_addr
+  FROM ltc_addresses
+  WHERE is_reserved = FALSE OR reserved_until < NOW()
+  ORDER BY last_used_at ASC NULLS FIRST, address_index ASC
+  LIMIT 1
+  FOR UPDATE SKIP LOCKED;
+
+  IF selected_addr.id IS NOT NULL THEN
+    -- Reserve the address for 30 minutes, update last_used_at and increment use_count
+    UPDATE ltc_addresses
+    SET is_reserved = TRUE,
+        reserved_until = NOW() + INTERVAL '30 minutes',
+        last_used_at = NOW(),
+        use_count = use_count + 1
+    WHERE id = selected_addr.id
+    RETURNING * INTO selected_addr;
+    
+    RETURN NEXT selected_addr;
+  END IF;
+  
+  RETURN;
+END;
+$$ LANGUAGE plpgsql;
+

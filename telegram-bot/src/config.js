@@ -2,8 +2,7 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const config = {
-  supabaseUrl: process.env.SUPABASE_URL,
-  supabaseKey: process.env.SUPABASE_KEY,
+  databaseUrl: process.env.DATABASE_URL,
   telegramToken: process.env.TELEGRAM_TOKEN,
   encryptionKey: process.env.ENCRYPTION_KEY,
   upgraderApiKey: process.env.UPGRADER_API_KEY,
@@ -13,8 +12,7 @@ const config = {
 
 // Validate required configurations
 const missing = [];
-if (!config.supabaseUrl) missing.push('SUPABASE_URL');
-if (!config.supabaseKey) missing.push('SUPABASE_KEY');
+if (!config.databaseUrl) missing.push('DATABASE_URL');
 if (!config.telegramToken) missing.push('TELEGRAM_TOKEN');
 if (!config.encryptionKey) missing.push('ENCRYPTION_KEY');
 

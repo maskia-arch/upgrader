@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "postinstall": "cd telegram-bot && npm install",
-    "start": "node telegram-bot/src/index.js"
+    "postinstall": "cd telegram-bot && npm install && cd ../admin-dashboard && npm install",
+    "start": "node start.js"
   }
 }
