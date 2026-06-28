@@ -160,10 +160,10 @@ async function handleShowPackages(ctx) {
         ? t('packages_duration_one', lang) 
         : t('packages_duration_multi', lang, { months: pkg.duration_months });
 
-      msg += t('packages_price', lang, { duration: durationStr, price: pkg.price_eur.toFixed(2) });
+      msg += t('packages_price', lang, { duration: durationStr, price: parseFloat(pkg.price_eur).toFixed(2) });
       buttons.push([{
         ...Markup.button.callback(
-          t('packages_book_now_btn', lang, { name: pkg.name, price: pkg.price_eur.toFixed(2) }), 
+          t('packages_book_now_btn', lang, { name: pkg.name, price: parseFloat(pkg.price_eur).toFixed(2) }), 
           `buy_${pkg.id}`
         ),
         style: 'success'
@@ -413,8 +413,8 @@ async function sendPaymentInvoice(ctx, subId, invoice, address, packageName) {
   
   const msg = t('invoice_text', lang, {
     name: packageName,
-    amountLtc: invoice.amount_ltc.toFixed(8),
-    amountEur: invoice.amount_eur.toFixed(2),
+    amountLtc: parseFloat(invoice.amount_ltc).toFixed(8),
+    amountEur: parseFloat(invoice.amount_eur).toFixed(2),
     address: address,
     time: timeFormatted
   });
@@ -484,7 +484,7 @@ bot.action(/^show_qr_(.+)$/, async (ctx) => {
     }
 
     const address = invoice.ltc_addresses?.ltc_address;
-    const amount = invoice.amount_ltc.toFixed(8);
+    const amount = parseFloat(invoice.amount_ltc).toFixed(8);
 
     // Create Litecoin payment URI (BIP 21 standard)
     const paymentUri = `litecoin:${address}?amount=${amount}`;
@@ -619,8 +619,8 @@ bot.action(/^keep_pay_(.+)$/, async (ctx) => {
     
     const msg = t('invoice_text', lang, {
       name: invoice.subscriptions?.packages?.name || '',
-      amountLtc: invoice.amount_ltc.toFixed(8),
-      amountEur: invoice.amount_eur.toFixed(2),
+      amountLtc: parseFloat(invoice.amount_ltc).toFixed(8),
+      amountEur: parseFloat(invoice.amount_eur).toFixed(2),
       address: invoice.ltc_addresses?.ltc_address || '',
       time: timeFormatted
     });
@@ -1362,10 +1362,10 @@ bot.action(/^renew_menu_(.+)$/, async (ctx) => {
         ? t('packages_duration_one', lang) 
         : t('packages_duration_multi', lang, { months: pkg.duration_months });
 
-      msg += t('packages_price', lang, { duration: durationStr, price: pkg.price_eur.toFixed(2) });
+      msg += t('packages_price', lang, { duration: durationStr, price: parseFloat(pkg.price_eur).toFixed(2) });
       buttons.push([{
         ...Markup.button.callback(
-          t('packages_book_now_btn', lang, { name: pkg.name, price: pkg.price_eur.toFixed(2) }), 
+          t('packages_book_now_btn', lang, { name: pkg.name, price: parseFloat(pkg.price_eur).toFixed(2) }), 
           `renew_pkg_${subId}_${pkg.id}`
         ),
         style: 'success'
