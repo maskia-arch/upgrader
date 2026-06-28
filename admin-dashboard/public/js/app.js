@@ -1109,3 +1109,20 @@ async function deleteFeedback(id) {
     alert(`Fehler beim Löschen der Bewertung: ${err.message}`);
   }
 }
+
+// ----------------- EMOJI PALETTE INTEGRATION -----------------
+
+function insertEmoji(emoji) {
+  const textarea = document.getElementById('broadcast-message');
+  if (!textarea) return;
+  
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const text = textarea.value;
+  
+  textarea.value = text.substring(0, start) + emoji + text.substring(end);
+  
+  // Restore cursor position
+  textarea.focus();
+  textarea.selectionStart = textarea.selectionEnd = start + emoji.length;
+}
