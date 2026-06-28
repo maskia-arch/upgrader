@@ -223,7 +223,13 @@ async function broadcastTx(txHex) {
 }
 
 
-const WALLET_FILE_PATH = path.join(__dirname, '../wallet.json');
+const WALLET_FILE_PATH = process.env.WALLET_PATH || path.join(__dirname, '../wallet.json');
+
+// Ensure parent directory exists for persistent mounts
+const walletDir = path.dirname(WALLET_FILE_PATH);
+if (!fs.existsSync(walletDir)) {
+  fs.mkdirSync(walletDir, { recursive: true });
+}
 
 const LITECOIN_NETWORK = {
   messagePrefix: '\x19Litecoin Signed Message:\n',

@@ -1,31 +1,8 @@
-const { createClient } = require('@supabase/supabase-js');
-const fs = require('fs');
-const path = require('path');
+const { supabase } = require('./db');
 const { encrypt, decrypt } = require('./crypto');
 const { renewAccount } = require('./upgrader');
 
-// Load configurations from admin-dashboard/.env.local for real database testing
-const envPath = path.join(__dirname, '../../admin-dashboard/.env.local');
-const envContent = fs.readFileSync(envPath, 'utf8');
-const env = {};
-envContent.split('\n').forEach(line => {
-  const match = line.match(/^\s*([^#=\s]+)\s*=\s*(.*)$/);
-  if (match) {
-    let val = match[2].trim();
-    if (val.startsWith('"') && val.endsWith('"')) val = val.substring(1, val.length - 1);
-    if (val.startsWith("'") && val.endsWith("'")) val = val.substring(1, val.length - 1);
-    env[match[1]] = val;
-  }
-});
-
-process.env.SUPABASE_URL = env.SUPABASE_URL;
-process.env.SUPABASE_KEY = env.SUPABASE_KEY;
-process.env.ENCRYPTION_KEY = env.ENCRYPTION_KEY;
 process.env.USE_MOCK_API = 'true'; // Enable mock mode for testing upgrader errors safely
-
-const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_KEY, {
-  auth: { persistSession: false }
-});
 
 async function runTests() {
   console.log('=== STARTING ABUSE PROTECTION VERIFICATION ===');
