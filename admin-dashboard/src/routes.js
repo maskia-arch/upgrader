@@ -176,7 +176,7 @@ router.delete('/packages/:id', async (req, res) => {
     const { error } = await supabase.from('packages').delete().eq('id', id);
     console.log(`[DEBUG DELETE /packages/${id}] DB Result error:`, error);
     if (error) return handleDbError(error, res);
-    res.sendStatus(204);
+    res.json({ success: true });
   } catch (err) {
     console.error(`[DEBUG DELETE /packages/${id}] Catch error:`, err);
     handleDbError(err, res);
