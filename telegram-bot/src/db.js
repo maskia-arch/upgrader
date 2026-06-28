@@ -412,7 +412,7 @@ class QueryBuilder {
           insertSql = `INSERT INTO ${this.table} (${keys.join(', ')}) VALUES (${placeholders.join(', ')})`;
         }
 
-        queryText = `WITH affected AS (${insertSql} RETURNING *) SELECT ${compiledProjection} FROM affected`;
+        queryText = `WITH ${this.table} AS (${insertSql} RETURNING *) SELECT ${compiledProjection} FROM ${this.table}`;
         queryVals = insertVals;
       } else if (this.operation === 'update') {
         const keys = Object.keys(this.updateData);
@@ -422,10 +422,10 @@ class QueryBuilder {
           return `${key} = $${queryVals.length}`;
         });
         const updateSql = `UPDATE ${this.table} SET ${setClauses.join(', ')}${whereSql}`;
-        queryText = `WITH affected AS (${updateSql} RETURNING *) SELECT ${compiledProjection} FROM affected`;
+        queryText = `WITH ${this.table} AS (${updateSql} RETURNING *) SELECT ${compiledProjection} FROM ${this.table}`;
       } else if (this.operation === 'delete') {
         const deleteSql = `DELETE FROM ${this.table}${whereSql}`;
-        queryText = `WITH affected AS (${deleteSql} RETURNING *) SELECT ${compiledProjection} FROM affected`;
+        queryText = `WITH ${this.table} AS (${deleteSql} RETURNING *) SELECT ${compiledProjection} FROM ${this.table}`;
       }
 
       const res = await pool.query(queryText, queryVals);
