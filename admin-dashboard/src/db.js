@@ -225,6 +225,11 @@ class QueryBuilder {
     return this;
   }
 
+  not(col, op, val) {
+    this.filters.push({ type: 'not', col, op, val });
+    return this;
+  }
+
   order(col, options = {}) {
     this.orders.push({
       col,
@@ -297,6 +302,33 @@ class QueryBuilder {
       if (f.type === 'in') {
         params.push(f.val);
         return `${this.table}.${f.col} = ANY($${params.length})`;
+      }
+
+      if (f.type === 'not') {
+        if (f.op === 'is' && f.val === null) {
+          return `${this.table}.${f.col} IS NOT NULL`;
+        }
+        if (f.op === 'eq') {
+          if (f.val === null) return `${this.table}.${f.col} IS NOT NULL`;
+          params.push(f.val);
+          return `${this.table}.${f.col} != $${params.length}`;
+        }
+        const opMap = {
+          eq: '=',
+          neq: '!=',
+          gt: '>',
+          lt: '<',
+          gte: '>=',
+          lte: '<=',
+          like: 'LIKE',
+          ilike: 'ILIKE'
+        };
+        const sqlOp = opMap[f.op] || '=';
+        if (f.val === null) {
+          return `NOT (${this.table}.${f.col} IS NULL)`;
+        }
+        params.push(f.val);
+        return `NOT (${this.table}.${f.col} ${sqlOp} $${params.length})`;
       }
 
       params.push(f.val);
