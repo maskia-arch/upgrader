@@ -13,7 +13,7 @@ const botProcess = fork(path.join(__dirname, 'telegram-bot/src/index.js'), {
 
 // Fork Admin Dashboard & Mini App Placeholder process
 const adminProcess = fork(path.join(__dirname, 'admin-dashboard/src/index.js'), {
-  env: { ...process.env, PORT: process.env.PORT || '8001' }
+  env: { ...process.env, PORT: process.env.PORT || '3000' }
 });
 
 // Graceful shutdown handling

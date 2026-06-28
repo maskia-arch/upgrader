@@ -23,7 +23,7 @@ if (fs.existsSync(botEnvPath)) {
 }
 
 const config = {
-  port: process.env.PORT || 8001,
+  port: process.env.PORT || 3000,
   databaseUrl: process.env.DATABASE_URL,
   encryptionKey: process.env.ENCRYPTION_KEY,
   upgraderApiKey: process.env.UPGRADER_API_KEY,

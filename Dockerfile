@@ -17,8 +17,8 @@ RUN npm install && \
 # Copy the rest of the application files
 COPY . .
 
-# Expose port 8001 (Admin Dashboard & Mini App Subdomain Placeholder)
-EXPOSE 8001
+# Expose port 3000 (Admin Dashboard & Mini App Subdomain Placeholder)
+EXPOSE 3000
 
 # Launch the process manager to execute both bot and dashboard
 CMD ["node", "start.js"]
