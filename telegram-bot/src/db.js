@@ -14,12 +14,12 @@ async function initializeDatabase() {
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
-        AND table_name = 'users'
+        AND table_name = 'packages'
       );
     `);
     
     if (!checkRes.rows[0].exists) {
-      console.log('[DATABASE] Table "users" does not exist. Running database schema initialization...');
+      console.log('[DATABASE] Table "packages" does not exist. Running database schema initialization...');
       const paths = [
         path.join(__dirname, '../../database/schema.sql'),
         path.join(__dirname, '../database/schema.sql'),

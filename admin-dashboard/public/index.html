@@ -57,7 +57,7 @@
       <header class="top-header">
         <h2>Dashboard</h2>
         <div class="connection-status">
-          <span class="dot green"></span> Connected to Supabase
+          <span class="dot green"></span> Connected to PostgreSQL
         </div>
       </header>
 
@@ -65,9 +65,9 @@
       <div id="db-warning-banner" class="alert-info-box hidden" style="background-color:rgba(255, 77, 77, 0.08); border-color:var(--error-color); color:var(--text-main); margin-bottom:30px; padding:20px; border-radius:12px;">
         <h4 style="font-family:var(--font-title); color:var(--error-color); margin-bottom:8px; font-size:16px;">⚠️ Datenbank-Schema nicht initialisiert</h4>
         <p style="line-height:1.5; font-size:13px;">
-          Das SQL-Schema wurde noch nicht in Supabase ausgeführt. Bitte führe das SQL-Skript 
+          Das SQL-Schema wurde noch nicht in PostgreSQL ausgeführt. Bitte stelle sicher, dass das SQL-Skript 
           <code style="background-color:var(--bg-tertiary); padding:2px 6px; border-radius:4px; font-family:monospace;">database/schema.sql</code> 
-          im SQL Editor deiner Supabase Console aus, um das System vollständig zu aktivieren.
+          in deiner PostgreSQL-Datenbank ausgeführt wurde, um das System vollständig zu aktivieren.
         </p>
       </div>
 

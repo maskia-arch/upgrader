@@ -54,9 +54,9 @@ function checkRequestError(data) {
       if (data.error === 'database_not_initialized') {
         banner.querySelector('h4').innerText = '⚠️ Datenbank-Schema nicht initialisiert';
         banner.querySelector('p').innerHTML = `
-          Das SQL-Schema wurde noch nicht in Supabase ausgeführt. Bitte führe das SQL-Skript 
+          Das SQL-Schema wurde noch nicht in PostgreSQL ausgeführt. Bitte stelle sicher, dass das SQL-Skript 
           <code style="background-color:var(--bg-tertiary); padding:2px 6px; border-radius:4px; font-family:monospace;">database/schema.sql</code> 
-          im SQL Editor deiner Supabase Console aus, um das System vollständig zu aktivieren.
+          in deiner PostgreSQL-Datenbank importiert wurde, um das System vollständig zu aktivieren.
         `;
       } else {
         banner.querySelector('h4').innerText = '⚠️ System- oder Verbindungsfehler';
@@ -64,7 +64,7 @@ function checkRequestError(data) {
           Es ist ein Fehler aufgetreten: 
           <code style="background-color:var(--bg-tertiary); padding:2px 6px; border-radius:4px; font-family:monospace;">${data.error}</code>.
           <br><br>
-          Bitte überprüfe die Verbindung zu Supabase und deine lokale Konfiguration in <code style="font-family:monospace;">.env.local</code>.
+          Bitte überprüfe die Verbindung zu PostgreSQL und deine Konfiguration der Umgebungsvariablen.
         `;
       }
     }
