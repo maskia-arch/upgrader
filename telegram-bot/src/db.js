@@ -17,11 +17,11 @@ async function initializeDatabase() {
       AND table_name IN (
         'packages', 'ltc_addresses', 'upgrader_keys', 'users', 
         'coupons', 'subscriptions', 'invoices', 'system_logs', 
-        'broadcasts', 'feedback', 'bot_messages_cleanup'
+        'broadcasts', 'feedback', 'bot_messages_cleanup', 'key_history'
       );
     `);
     
-    if (checkRes.rows.length < 11) {
+    if (checkRes.rows.length < 12) {
       console.log('[DATABASE] Some tables are missing. Running database schema initialization...');
       const paths = [
         path.join(__dirname, '../../database/schema.sql'),

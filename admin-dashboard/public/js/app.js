@@ -478,6 +478,47 @@ async function submitImportKeysForm(e) {
   }
 }
 
+function showExportHistoryModal() {
+  document.getElementById('export-password-input').value = '';
+  openModal('modal-export-history');
+}
+
+async function submitExportHistoryForm(e) {
+  e.preventDefault();
+  const password = document.getElementById('export-password-input').value;
+  try {
+    const res = await fetch('/api/keys/history/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+
+    if (res.status === 403) {
+      const data = await res.json();
+      throw new Error(data.error || 'Falsches Export-Passwort.');
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Export-Fehler auf dem Server.');
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'key_history.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    closeModal('modal-export-history');
+  } catch (err) {
+    alert(`Export fehlgeschlagen: ${err.message}`);
+  }
+}
+
+
 async function checkKeyStatus(id) {
   try {
     const res = await fetch(`/api/keys/check/${id}`, { method: 'POST' });

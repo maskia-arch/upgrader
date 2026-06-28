@@ -156,7 +156,16 @@ CREATE TABLE IF NOT EXISTS bot_messages_cleanup (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 11. Atomic Coupon Usage Functions
+-- 11. Key History Logging
+CREATE TABLE IF NOT EXISTS key_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    spotify_email TEXT NOT NULL,
+    spotify_password_encrypted TEXT NOT NULL,
+    api_key TEXT NOT NULL,
+    last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 12. Atomic Coupon Usage Functions
 CREATE OR REPLACE FUNCTION increment_coupon_uses(coupon_uuid UUID)
 RETURNS BOOLEAN AS $$
 DECLARE

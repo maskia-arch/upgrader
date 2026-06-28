@@ -177,7 +177,10 @@
       <section id="panel-keys" class="dashboard-panel">
         <div class="panel-header-actions">
           <h3>🔑 Reseller Upgrade Keys</h3>
-          <button class="btn btn-primary" onclick="showImportKeysModal()">+ Import Keys</button>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn btn-secondary" onclick="showExportHistoryModal()">📜 Export Key-History</button>
+            <button class="btn btn-primary" onclick="showImportKeysModal()">+ Import Keys</button>
+          </div>
         </div>
         
         <div class="keys-summary-strip">
@@ -516,6 +519,26 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" onclick="closeModal('modal-coupon')">Cancel</button>
           <button type="submit" class="btn btn-primary">Save Coupon</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Export Key History -->
+  <div id="modal-export-history" class="modal">
+    <div class="modal-content glass">
+      <h3>📜 Key-Historie exportieren</h3>
+      <form id="form-export-history" onsubmit="submitExportHistoryForm(event)">
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px; line-height: 1.4;">
+          Geben Sie das Sicherheits-Exportpasswort ein, um den Download der Key-Historie im Klartext (.txt) zu starten.
+        </p>
+        <div class="form-group">
+          <label for="export-password-input">Export-Passwort</label>
+          <input type="password" id="export-password-input" required placeholder="Sicherheits-Passwort eingeben" style="width: 100%; padding: 10px; border-radius: 8px; background-color: var(--bg-tertiary); color: var(--text-main); border: 1px solid var(--border-color);">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-export-history')">Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Download starten</button>
         </div>
       </form>
     </div>

@@ -261,6 +261,57 @@ router.post('/keys/check/:id', async (req, res) => {
   }
 });
 
+// Export key history as TXT file (Requires password verification)
+router.post('/keys/history/export', async (req, res) => {
+  const { password } = req.body;
+  const expectedPassword = process.env.EXPORT_PASSWORD || config.encryptionKey;
+
+  if (!password || password !== expectedPassword) {
+    return res.status(403).json({ error: 'Falsches Export-Passwort.' });
+  }
+
+  try {
+    const { data: history, error } = await supabase
+      .from('key_history')
+      .select('*')
+      .order('last_used_at', { ascending: false });
+
+    if (error) return handleDbError(error, res);
+
+    let textContent = `==================================================\n`;
+    textContent += `SPOTIFY UPGRADE BOT - KEY HISTORY EXPORT\n`;
+    textContent += `Export Date: ${new Date().toISOString()}\n`;
+    textContent += `==================================================\n\n`;
+
+    if (!history || history.length === 0) {
+      textContent += `Keine Eintraege in der Key-Historie gefunden.\n`;
+    } else {
+      history.forEach((row, i) => {
+        let decPassword = 'DECRYPTION_FAILED';
+        try {
+          decPassword = decrypt(row.spotify_password_encrypted);
+        } catch (decErr) {
+          console.error('[DECRYPT ERROR] Failed to decrypt password for history row:', row.id);
+        }
+
+        textContent += `Eintrag #${i + 1}\n`;
+        textContent += `--------------------------------------------------\n`;
+        textContent += `Spotify E-Mail: ${row.spotify_email}\n`;
+        textContent += `Spotify Passwort: ${decPassword}\n`;
+        textContent += `Upgrade Key:    ${row.api_key}\n`;
+        textContent += `Zuletzt genutzt: ${row.last_used_at}\n`;
+        textContent += `--------------------------------------------------\n\n`;
+      });
+    }
+
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Content-Disposition', 'attachment; filename=key_history.txt');
+    return res.send(textContent);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 4. LTC Addresses Pool
 router.get('/addresses', async (req, res) => {
   try {
@@ -467,6 +518,18 @@ router.post('/subscriptions/retry/:id', async (req, res) => {
     const upgradeRes = await upgradeAccount(keyObj.api_key, sub.spotify_email, password);
 
     if (upgradeRes.success) {
+      // Log key history entry
+      try {
+        await supabase.from('key_history').insert({
+          spotify_email: sub.spotify_email,
+          spotify_password_encrypted: sub.spotify_password_encrypted,
+          api_key: keyObj.api_key,
+          last_used_at: new Date().toISOString()
+        });
+      } catch (logHistErr) {
+        console.error('[DATABASE ERROR] Failed to log key history:', logHistErr.message);
+      }
+
       await supabase
         .from('upgrader_keys')
         .update({ status: 'active', spotify_account_id: upgradeRes.spotifyAccountId || null, error_message: null, updated_at: new Date().toISOString() })

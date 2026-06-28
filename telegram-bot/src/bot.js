@@ -1782,6 +1782,18 @@ bot.on('text', async (ctx) => {
     await ctx.telegram.deleteMessage(ctx.chat.id, waitMsg.message_id);
 
     if (upgradeRes.success) {
+      // Log key history entry
+      try {
+        await supabase.from('key_history').insert({
+          spotify_email: email,
+          spotify_password_encrypted: encryptedPassword,
+          api_key: keyObj.api_key,
+          last_used_at: new Date().toISOString()
+        });
+      } catch (logHistErr) {
+        console.error('[DATABASE ERROR] Failed to log key history:', logHistErr.message);
+      }
+
       // The task was successfully registered at upgrader.cc!
       // Keep status as 'activating' in the database and mark key as active
       await supabase
