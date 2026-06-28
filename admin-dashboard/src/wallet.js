@@ -6,6 +6,17 @@ const { HDKey } = require('@scure/bip32');
 const bitcoin = require('bitcoinjs-lib');
 const { secp256k1 } = require('@noble/curves/secp256k1');
 
+// Wrap global fetch to automatically append User-Agent headers for blockchain explorers
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async function (url, options = {}) {
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    ...(options.headers || {})
+  };
+  return originalFetch(url, { ...options, headers });
+};
+
 /**
  * Helper to delay/throttle between API requests.
  */

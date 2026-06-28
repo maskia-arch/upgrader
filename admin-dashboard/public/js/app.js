@@ -335,9 +335,9 @@ async function fetchPackages() {
         <tr>
           <td>*${pkg.name}*</td>
           <td>${pkg.duration_months} Monate</td>
-          <td>${pkg.price_eur.toFixed(2)} EUR</td>
+          <td>${parseFloat(pkg.price_eur).toFixed(2)} EUR</td>
           <td>
-            <button class="btn btn-secondary btn-sm" onclick="editPackage('${pkg.id}', '${pkg.name}', ${pkg.duration_months}, ${pkg.price_eur})">Bearbeiten</button>
+            <button class="btn btn-secondary btn-sm" onclick="editPackage('${pkg.id}', '${pkg.name}', ${pkg.duration_months}, ${parseFloat(pkg.price_eur)})">Bearbeiten</button>
             <button class="btn btn-danger btn-sm" onclick="deletePackage('${pkg.id}')">Löschen</button>
           </td>
         </tr>

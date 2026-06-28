@@ -1,5 +1,16 @@
 const config = require('./config');
 
+// Wrap global fetch to automatically append User-Agent headers for blockchain explorers
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async function (url, options = {}) {
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    ...(options.headers || {})
+  };
+  return originalFetch(url, { ...options, headers });
+};
+
 /**
  * Fetch the current spot price of LTC in EUR from Coinbase with fallbacks.
  * @returns {Promise<number>} Exchange rate (EUR per LTC)
