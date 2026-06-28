@@ -92,7 +92,9 @@ function parseSelect(str) {
 }
 
 // Helper: Compile select tokens recursively to construct JSON queries
-function compileField(parentTable, token) {
+function compileField(parentTable, token, realTable = null) {
+  const tableKey = (parentTable === 'affected') ? realTable : parentTable;
+
   if (!token.includes('(')) {
     if (token === '*') return `${parentTable}.*`;
     return `${parentTable}.${token}`;
@@ -102,7 +104,7 @@ function compileField(parentTable, token) {
   const relationName = token.substring(0, openParen).trim();
   const subfieldsStr = token.substring(openParen + 1, token.length - 1).trim();
   
-  const rel = RELATIONS[parentTable]?.[relationName];
+  const rel = RELATIONS[tableKey]?.[relationName];
   if (!rel) {
     const fkey = `${relationName}_id`;
     return `(SELECT row_to_json(r) FROM (SELECT * FROM ${relationName} WHERE ${relationName}.id = ${parentTable}.${fkey}) r) AS ${relationName}`;
@@ -366,8 +368,9 @@ class QueryBuilder {
       }
 
       // Compile select projection
+      const projectionTable = (this.operation === 'select') ? this.table : 'affected';
       const parsedSelect = parseSelect(this.selectFields);
-      const compiledProjection = parsedSelect.map(f => compileField(this.table, f)).join(', ');
+      const compiledProjection = parsedSelect.map(f => compileField(projectionTable, f, this.table)).join(', ');
 
       if (this.operation === 'select') {
         let orderSql = '';
@@ -412,7 +415,7 @@ class QueryBuilder {
           insertSql = `INSERT INTO ${this.table} (${keys.join(', ')}) VALUES (${placeholders.join(', ')})`;
         }
 
-        queryText = `WITH ${this.table} AS (${insertSql} RETURNING *) SELECT ${compiledProjection} FROM ${this.table}`;
+        queryText = `WITH affected AS (${insertSql} RETURNING *) SELECT ${compiledProjection} FROM affected`;
         queryVals = insertVals;
       } else if (this.operation === 'update') {
         const keys = Object.keys(this.updateData);
@@ -422,10 +425,10 @@ class QueryBuilder {
           return `${key} = $${queryVals.length}`;
         });
         const updateSql = `UPDATE ${this.table} SET ${setClauses.join(', ')}${whereSql}`;
-        queryText = `WITH ${this.table} AS (${updateSql} RETURNING *) SELECT ${compiledProjection} FROM ${this.table}`;
+        queryText = `WITH affected AS (${updateSql} RETURNING *) SELECT ${compiledProjection} FROM affected`;
       } else if (this.operation === 'delete') {
         const deleteSql = `DELETE FROM ${this.table}${whereSql}`;
-        queryText = `WITH ${this.table} AS (${deleteSql} RETURNING *) SELECT ${compiledProjection} FROM ${this.table}`;
+        queryText = `WITH affected AS (${deleteSql} RETURNING *) SELECT ${compiledProjection} FROM affected`;
       }
 
       const res = await pool.query(queryText, queryVals);
